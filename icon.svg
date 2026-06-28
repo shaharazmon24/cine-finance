@@ -1,0 +1,27 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#1b2029"/>
+      <stop offset="1" stop-color="#0c0e13"/>
+    </linearGradient>
+    <linearGradient id="gold" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#e9bd70"/>
+      <stop offset="1" stop-color="#b08c45"/>
+    </linearGradient>
+  </defs>
+  <rect width="512" height="512" rx="112" fill="url(#bg)"/>
+  <!-- clapperboard top: angled striped bar -->
+  <g transform="rotate(-9 256 188)">
+    <rect x="132" y="150" width="248" height="52" rx="11" fill="url(#gold)"/>
+    <g fill="#0c0e13">
+      <polygon points="158,150 188,150 168,202 138,202"/>
+      <polygon points="212,150 242,150 222,202 192,202"/>
+      <polygon points="266,150 296,150 276,202 246,202"/>
+      <polygon points="320,150 350,150 330,202 300,202"/>
+    </g>
+  </g>
+  <!-- board body -->
+  <rect x="150" y="214" width="212" height="150" rx="18" fill="url(#gold)"/>
+  <!-- shekel mark -->
+  <text x="256" y="332" font-family="Arial, Helvetica, sans-serif" font-weight="bold" font-size="118" fill="#0c0e13" text-anchor="middle">₪</text>
+</svg>

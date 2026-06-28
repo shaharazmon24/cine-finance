@@ -1,0 +1,16 @@
+{
+  "name": "CINE FINANCE — ניהול העסק",
+  "short_name": "CINE FINANCE",
+  "description": "ניהול העסק של צלם עצמאי — ימי עבודה, חוזים, מסים, לוח שנה ותזרים.",
+  "lang": "he",
+  "dir": "rtl",
+  "start_url": ".",
+  "scope": ".",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#0c0e13",
+  "theme_color": "#0c0e13",
+  "icons": [
+    { "src": "./icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any maskable" }
+  ]
+}

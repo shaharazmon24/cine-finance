@@ -1,0 +1,1666 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>CINE FINANCE — ניהול העסק</title>
+<!-- Installable web app (PWA) — add-to-home-screen on phone -->
+<link rel="manifest" href="./manifest.webmanifest">
+<meta name="theme-color" content="#0c0e13">
+<link rel="icon" href="./icon.svg">
+<link rel="apple-touch-icon" href="./icon.svg">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="CINE FINANCE">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Heebo:wght@300;400;500;700;900&display=swap" rel="stylesheet">
+<!-- pdf.js for client-side page count / fallback text; mammoth for .docx -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/mammoth/1.6.0/mammoth.browser.min.js"></script>
+<!-- Supabase JS — automatic multi-device cloud sync -->
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+:root{
+  --bg:#0c0e13; --bg2:#0f1219; --panel:#161a22; --panel2:#1b2029; --line:#252b36; --line2:#323a47;
+  --text:#e8eaed; --muted:#9aa3b2; --faint:#6b7280;
+  --accent:#e0b15e; --accent-dim:#b08c45;
+  --good:#5fc88f; --warn:#e8a15f; --bad:#e8685f; --info:#5f9ce8;
+  --r:14px;
+}
+*{box-sizing:border-box}
+html,body{margin:0;height:100%}
+body{
+  font-family:'Heebo',system-ui,Arial,sans-serif; background:var(--bg); color:var(--text);
+  -webkit-font-smoothing:antialiased; overflow:hidden;
+}
+button{font-family:inherit; cursor:pointer}
+input,select,textarea{font-family:inherit}
+::-webkit-scrollbar{width:10px;height:10px}
+::-webkit-scrollbar-thumb{background:#2a313d;border-radius:8px}
+::-webkit-scrollbar-track{background:transparent}
+
+/* ---------- Layout ---------- */
+#app{display:flex; height:100vh}
+.sidebar{
+  width:230px; flex:0 0 230px; background:var(--bg2); border-inline-start:1px solid var(--line);
+  display:flex; flex-direction:column; padding:18px 14px;
+}
+.brand{font-family:'Bebas Neue',sans-serif; font-size:30px; letter-spacing:1px; padding:6px 8px 2px; line-height:1}
+.brand .a{color:var(--accent)}
+.brand-sub{color:var(--faint); font-size:11px; padding:0 8px 18px; letter-spacing:.5px}
+.nav{display:flex; flex-direction:column; gap:4px; flex:1}
+.nav button{
+  display:flex; align-items:center; gap:11px; background:transparent; border:0; color:var(--muted);
+  text-align:start; padding:11px 12px; border-radius:10px; font-size:15px; transition:.15s;
+}
+.nav button:hover{background:var(--panel); color:var(--text)}
+.nav button.active{background:var(--panel2); color:var(--text)}
+.nav button.active .ic{color:var(--accent)}
+.nav .ic{width:20px; text-align:center; font-size:17px}
+.side-foot{border-top:1px solid var(--line); padding-top:12px; margin-top:8px}
+.apikey-pill{display:flex; align-items:center; gap:8px; font-size:12px; color:var(--muted); padding:6px 8px}
+.dot{width:8px;height:8px;border-radius:50%;background:var(--bad);flex:0 0 8px}
+.dot.ok{background:var(--good)}
+
+main{flex:1; display:flex; flex-direction:column; min-width:0}
+.topbar{
+  height:62px; flex:0 0 62px; border-bottom:1px solid var(--line); display:flex; align-items:center;
+  padding:0 26px; gap:16px; background:linear-gradient(180deg,var(--bg2),var(--bg));
+}
+.topbar h1{font-size:21px; font-weight:500; margin:0}
+.topbar .spacer{flex:1}
+.content{flex:1; overflow:auto; padding:26px}
+.view{display:none; animation:fade .25s ease}
+.view.active{display:block}
+@keyframes fade{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
+
+/* ---------- Reusable ---------- */
+.btn{
+  background:var(--panel2); color:var(--text); border:1px solid var(--line2); border-radius:10px;
+  padding:10px 16px; font-size:14px; transition:.15s; display:inline-flex; align-items:center; gap:8px;
+}
+.btn:hover{border-color:var(--accent-dim)}
+.btn.primary{background:var(--accent); color:#1a1205; border-color:var(--accent); font-weight:700}
+.btn.primary:hover{background:#e9bd70}
+.btn.ghost{background:transparent}
+.btn.sm{padding:7px 12px; font-size:13px}
+.btn:disabled{opacity:.5; cursor:not-allowed}
+.card{background:var(--panel); border:1px solid var(--line); border-radius:var(--r); padding:18px}
+.muted{color:var(--muted)}
+.faint{color:var(--faint)}
+.grid{display:grid; gap:14px}
+.row{display:flex; gap:12px; align-items:center}
+label.fld{display:flex; flex-direction:column; gap:5px; font-size:13px; color:var(--muted)}
+label.fld input,label.fld select,label.fld textarea{
+  background:var(--bg2); border:1px solid var(--line2); border-radius:9px; padding:10px 12px;
+  color:var(--text); font-size:14px; width:100%;
+}
+label.fld input:focus,label.fld select:focus,label.fld textarea:focus{outline:none;border-color:var(--accent-dim)}
+.tag{display:inline-block; font-size:11px; padding:3px 9px; border-radius:999px; border:1px solid var(--line2); color:var(--muted)}
+.tag.act{border-color:var(--accent-dim); color:var(--accent)}
+.empty{text-align:center; color:var(--faint); padding:60px 20px}
+.empty .big{font-size:46px; opacity:.4; margin-bottom:10px}
+
+/* ---------- Dropzone ---------- */
+.dropzone{
+  border:2px dashed var(--line2); border-radius:var(--r); padding:46px 24px; text-align:center;
+  transition:.2s; cursor:pointer; background:var(--bg2);
+}
+.dropzone:hover,.dropzone.over{border-color:var(--accent); background:#15171f}
+.dropzone .ic{font-size:42px; margin-bottom:10px}
+.dropzone h3{margin:0 0 6px; font-weight:500}
+
+/* ---------- Modal ---------- */
+.modal-bg{
+  position:fixed; inset:0; background:rgba(5,6,9,.72); backdrop-filter:blur(3px);
+  display:none; align-items:center; justify-content:center; z-index:50; padding:24px;
+}
+.modal-bg.open{display:flex}
+.modal{
+  background:var(--panel); border:1px solid var(--line2); border-radius:18px; width:min(720px,100%);
+  max-height:90vh; display:flex; flex-direction:column; box-shadow:0 24px 80px rgba(0,0,0,.6);
+}
+.modal-head{padding:18px 22px; border-bottom:1px solid var(--line); display:flex; align-items:center; gap:12px}
+.modal-head h2{margin:0; font-size:18px; font-weight:500}
+.modal-body{padding:22px; overflow:auto}
+.modal-foot{padding:16px 22px; border-top:1px solid var(--line); display:flex; gap:10px; justify-content:flex-start}
+.x{margin-inline-start:auto; background:transparent; border:0; color:var(--muted); font-size:22px; line-height:1}
+
+/* ---------- Status / spinner ---------- */
+.spin{width:18px;height:18px;border:2px solid rgba(224,177,94,.25);border-top-color:var(--accent);border-radius:50%;animation:sp .7s linear infinite;display:inline-block}
+@keyframes sp{to{transform:rotate(360deg)}}
+.statusline{display:flex;align-items:center;gap:10px;color:var(--muted);font-size:14px;padding:14px 2px}
+.statusline.err{color:var(--bad)}
+
+/* ---------- Stat cards / dashboard ---------- */
+.stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:14px}
+.stat{background:var(--panel);border:1px solid var(--line);border-radius:var(--r);padding:16px 18px}
+.stat .k{color:var(--muted);font-size:13px;margin-bottom:8px}
+.stat .v{font-size:26px;font-weight:700;font-variant-numeric:tabular-nums}
+.stat .v.gold{color:var(--accent)}
+.stat .v.good{color:var(--good)}
+.stat small{color:var(--faint);font-size:12px;font-weight:400}
+
+/* contract list */
+.clist{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:14px}
+.ccard{background:var(--panel);border:1px solid var(--line);border-radius:var(--r);padding:16px;transition:.15s;position:relative}
+.ccard:hover{border-color:var(--line2)}
+.ccard h3{margin:0 0 4px;font-size:16px;font-weight:500}
+.ccard .meta{color:var(--muted);font-size:13px;margin-bottom:12px}
+.ccard .kv{display:flex;justify-content:space-between;font-size:13px;padding:4px 0;border-top:1px solid var(--line)}
+.ccard .kv span:first-child{color:var(--faint)}
+.ccard .actions{display:flex;gap:8px;margin-top:12px}
+.ccard .del{position:absolute;top:12px;inset-inline-start:12px;background:transparent;border:0;color:var(--faint);font-size:16px}
+.ccard .del:hover{color:var(--bad)}
+.confbadge{font-size:11px;padding:2px 8px;border-radius:999px}
+.confbadge.high{background:rgba(95,200,143,.15);color:var(--good)}
+.confbadge.med{background:rgba(232,161,95,.15);color:var(--warn)}
+.confbadge.low{background:rgba(232,104,95,.15);color:var(--bad)}
+.taxtbl{width:100%;border-collapse:collapse;font-size:13px}
+.taxtbl td{padding:5px 8px;border-top:1px solid var(--line)}
+.taxtbl td:first-child{color:var(--accent);font-variant-numeric:tabular-nums;width:50px}
+.notice{background:rgba(95,156,232,.08);border:1px solid rgba(95,156,232,.25);border-radius:10px;padding:11px 13px;font-size:12.5px;line-height:1.6;color:var(--muted)}
+.src{font-size:11px;color:var(--faint)}
+.src a{color:var(--info);text-decoration:none}
+
+/* ---------- Data table (work days) ---------- */
+.tbl-wrap{background:var(--panel);border:1px solid var(--line);border-radius:var(--r);overflow:hidden}
+table.data{width:100%;border-collapse:collapse;font-size:14px}
+table.data th{
+  text-align:start;font-weight:500;color:var(--muted);font-size:12px;padding:12px 14px;
+  background:var(--bg2);border-bottom:1px solid var(--line);white-space:nowrap;
+}
+table.data td{padding:12px 14px;border-bottom:1px solid var(--line);vertical-align:middle}
+table.data tr:last-child td{border-bottom:0}
+table.data tbody tr{transition:.12s;cursor:pointer}
+table.data tbody tr:hover{background:var(--panel2)}
+table.data .num{font-variant-numeric:tabular-nums;text-align:start;white-space:nowrap}
+table.data .gross{color:var(--accent);font-weight:500}
+.rowdel{background:transparent;border:0;color:var(--faint);font-size:15px;padding:2px 6px;border-radius:6px}
+.rowdel:hover{color:var(--bad);background:rgba(232,104,95,.1)}
+.summ-bar{display:flex;flex-wrap:wrap;gap:10px;margin-bottom:16px}
+.summ{background:var(--panel);border:1px solid var(--line);border-radius:11px;padding:10px 16px;min-width:130px}
+.summ .k{color:var(--faint);font-size:11.5px;margin-bottom:3px}
+.summ .v{font-size:19px;font-weight:700;font-variant-numeric:tabular-nums}
+.summ .v.gold{color:var(--accent)} .summ .v.good{color:var(--good)}
+.st{display:inline-flex;align-items:center;gap:5px;font-size:11.5px;padding:3px 9px;border-radius:999px;border:1px solid var(--line2);white-space:nowrap}
+.st .d{width:7px;height:7px;border-radius:50%}
+.st.unissued{color:var(--faint)} .st.unissued .d{background:var(--faint)}
+.st.issued{color:var(--info);border-color:rgba(95,156,232,.4)} .st.issued .d{background:var(--info)}
+.st.paid{color:var(--good);border-color:rgba(95,200,143,.4)} .st.paid .d{background:var(--good)}
+.st.overdue{color:var(--bad);border-color:rgba(232,104,95,.4)} .st.overdue .d{background:var(--bad)}
+.st.tentative{color:var(--warn);border-color:rgba(232,161,95,.35)} .st.tentative .d{background:var(--warn)}
+.paybreak{font-size:12px;color:var(--muted);line-height:1.7;background:var(--bg2);border:1px solid var(--line);border-radius:10px;padding:11px 13px;margin-top:6px}
+.paybreak .ln{display:flex;justify-content:space-between;gap:12px}
+.paybreak .ln.tot{border-top:1px solid var(--line2);margin-top:5px;padding-top:6px;color:var(--text);font-weight:500}
+.paybreak .ln .num{font-variant-numeric:tabular-nums}
+.filters{display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap}
+.chip{background:var(--panel);border:1px solid var(--line2);color:var(--muted);border-radius:999px;padding:6px 14px;font-size:13px;transition:.12s}
+.chip:hover{border-color:var(--accent-dim)}
+.chip.on{background:var(--accent);color:#1a1205;border-color:var(--accent);font-weight:600}
+.viewtog{display:inline-flex;background:var(--panel);border:1px solid var(--line2);border-radius:999px;padding:3px;margin-inline-start:auto}
+.viewtog button{background:transparent;border:0;color:var(--muted);border-radius:999px;padding:5px 14px;font-size:13px}
+.viewtog button.on{background:var(--panel2);color:var(--text)}
+.cdot{display:inline-block;width:9px;height:9px;border-radius:50%;flex:0 0 9px;vertical-align:middle}
+
+/* ---------- Project groups ---------- */
+.pgroup{margin-bottom:16px;border:1px solid var(--line);border-radius:var(--r);overflow:hidden;background:var(--panel)}
+.pgroup-head{display:flex;align-items:center;gap:11px;padding:13px 16px;border-bottom:1px solid var(--line);cursor:pointer;border-inline-start:4px solid var(--line2)}
+.pgroup-head:hover{background:var(--panel2)}
+.pgroup-head h3{margin:0;font-size:15.5px;font-weight:500}
+.pgroup-head .pmeta{color:var(--faint);font-size:12.5px}
+.pgroup-head .psum{margin-inline-start:auto;text-align:start;display:flex;gap:18px;align-items:center}
+.pgroup-head .psum .pn{font-variant-numeric:tabular-nums;font-size:13px;color:var(--muted)}
+.pgroup-head .psum .pg{font-variant-numeric:tabular-nums;font-size:16px;font-weight:600;color:var(--accent)}
+.pgroup-head .edit{background:transparent;border:0;color:var(--faint);font-size:14px;padding:3px 7px;border-radius:6px}
+.pgroup-head .edit:hover{color:var(--accent);background:rgba(224,177,94,.1)}
+.pgroup table.data th{background:transparent}
+
+/* ---------- Calendar (Google-style) ---------- */
+.cal-head{display:flex;align-items:center;gap:14px;margin-bottom:16px}
+.cal-head h2{margin:0;font-size:22px;font-weight:500;min-width:170px}
+.cal-nav{display:inline-flex;gap:4px}
+.cal-nav button{width:34px;height:34px;border-radius:9px;background:var(--panel2);border:1px solid var(--line2);color:var(--text);font-size:16px;display:flex;align-items:center;justify-content:center}
+.cal-nav button:hover{border-color:var(--accent-dim)}
+.calgrid{display:grid;grid-template-columns:repeat(7,1fr);gap:1px;background:var(--line);border:1px solid var(--line);border-radius:var(--r);overflow:hidden}
+.caldow{background:var(--bg2);color:var(--muted);font-size:12px;font-weight:500;text-align:center;padding:9px 0}
+.calcell{background:var(--panel);min-height:104px;padding:6px 7px;display:flex;flex-direction:column;gap:4px;cursor:pointer;transition:.1s;position:relative}
+.calcell:hover{background:var(--panel2)}
+.calcell.other{background:var(--bg2)}
+.calcell.other .cnum{color:var(--faint)}
+.calcell .cnum{font-size:13px;color:var(--muted);font-variant-numeric:tabular-nums;align-self:flex-start;width:24px;height:24px;display:flex;align-items:center;justify-content:center;border-radius:50%}
+.calcell.today .cnum{background:var(--accent);color:#1a1205;font-weight:700}
+.cev{font-size:11.5px;line-height:1.3;padding:3px 7px;border-radius:6px;color:#fff;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;border-inline-start:3px solid rgba(255,255,255,.55)}
+.cev:hover{filter:brightness(1.12)}
+.cev.tent{opacity:.7;background-image:repeating-linear-gradient(45deg,rgba(255,255,255,.08) 0 5px,transparent 5px 10px)}
+.cev .cv{opacity:.85;font-variant-numeric:tabular-nums}
+.cev .cmore{color:var(--muted);background:transparent;padding-inline:2px}
+.cal-legend{display:flex;flex-wrap:wrap;gap:14px;margin-top:14px;font-size:12.5px;color:var(--muted)}
+.cal-legend span{display:inline-flex;align-items:center;gap:6px}
+
+/* ---------- Color swatches ---------- */
+.swatches{display:flex;gap:9px;flex-wrap:wrap}
+.swatch{width:28px;height:28px;border-radius:50%;cursor:pointer;border:2px solid transparent;transition:.1s}
+.swatch:hover{transform:scale(1.1)}
+.swatch.on{border-color:var(--text);box-shadow:0 0 0 2px var(--bg)}
+
+/* ---------- Mobile / phone layout ---------- */
+@media (max-width:760px){
+  html,body{overflow:auto}
+  #app{flex-direction:column; height:auto; min-height:100dvh}
+  /* sidebar → bottom tab bar */
+  .sidebar{
+    position:fixed; inset:auto 0 0 0; width:100%; flex:none; flex-direction:row;
+    align-items:stretch; height:62px; padding:0; border-top:1px solid var(--line);
+    border-inline-start:0; background:var(--bg2); z-index:45;
+  }
+  .brand,.brand-sub,.side-foot{display:none}
+  .nav{flex-direction:row; gap:0; flex:1; height:100%}
+  .nav button{
+    flex:1; flex-direction:column; gap:2px; justify-content:center; align-items:center;
+    padding:6px 1px; font-size:10px; border-radius:0; line-height:1.1;
+  }
+  .nav button.active{background:transparent}
+  .nav .ic{font-size:20px; width:auto}
+  main{min-width:0}
+  .topbar{height:54px; flex:0 0 54px; padding:0 16px; gap:8px; position:sticky; top:0; z-index:30}
+  .topbar h1{font-size:18px}
+  .content{padding:16px 13px 84px}   /* leave room for the fixed bottom nav */
+  /* bottom-sheet modals */
+  .modal-bg{padding:0; align-items:flex-end}
+  .modal{width:100%!important; max-width:100%; max-height:94dvh; border-radius:18px 18px 0 0}
+  .modal-foot{flex-wrap:wrap}
+  /* stack multi-column form grids */
+  [style*="1fr 1fr"]{grid-template-columns:1fr!important}
+  /* tighter calendar */
+  .calgrid{gap:1px}
+  .calcell{min-height:62px; padding:3px 4px}
+  .calcell .cnum{width:20px;height:20px;font-size:11px}
+  .cev{font-size:9.5px; padding:2px 4px}
+  .cev .cv{display:none}              /* hide the ₪k tag on tiny cells */
+  .caldow{font-size:10px;padding:6px 0}
+  .cal-head h2{font-size:18px;min-width:0}
+  /* tables scroll sideways instead of squashing */
+  .tbl-wrap,.pgroup>div{overflow-x:auto}
+  table.data th,table.data td{padding:9px 8px;font-size:13px;white-space:nowrap}
+  .viewtog{margin-inline-start:0}
+  .summ{min-width:calc(50% - 5px); flex:1}
+  .stat .v{font-size:22px}
+}
+</style>
+</head>
+<body>
+<div id="app">
+  <aside class="sidebar">
+    <div class="brand">CINE <span class="a">FINANCE</span></div>
+    <div class="brand-sub">ניהול העסק · נתונים מקומיים</div>
+    <nav class="nav" id="nav">
+      <button data-view="dashboard" class="active"><span class="ic">◧</span>דשבורד</button>
+      <button data-view="contracts"><span class="ic">❒</span>חוזים</button>
+      <button data-view="workdays"><span class="ic">☰</span>ימי עבודה</button>
+      <button data-view="calendar"><span class="ic">▦</span>לוח שנה</button>
+      <button data-view="expenses"><span class="ic">↧</span>הוצאות</button>
+      <button data-view="settings"><span class="ic">⚙</span>הגדרות</button>
+    </nav>
+    <div class="side-foot">
+      <div class="apikey-pill" id="syncPill" title="מצב סנכרון ענן" style="cursor:pointer" onclick="go('settings')"><span class="dot"></span><span>לא מחובר לענן</span></div>
+      <div class="apikey-pill" id="backupPill" title="מצב גיבוי הנתונים" style="cursor:pointer" onclick="go('settings')"><span class="dot"></span><span>לא מחובר גיבוי</span></div>
+      <div class="apikey-pill"><span class="dot" id="keyDot"></span><span id="keyText">לא הוגדר מפתח API</span></div>
+    </div>
+  </aside>
+
+  <main>
+    <div class="topbar">
+      <h1 id="pageTitle">דשבורד</h1>
+      <div class="spacer"></div>
+      <div id="topActions"></div>
+    </div>
+    <div class="content">
+
+      <!-- DASHBOARD -->
+      <section class="view active" id="view-dashboard">
+        <div class="stats" id="dashStats"></div>
+        <div style="height:18px"></div>
+        <div class="card">
+          <h3 style="margin:0 0 4px;font-weight:500">ברוך הבא 🎬</h3>
+          <p class="muted" style="margin:0 0 14px;line-height:1.7">זה מרכז הניהול של העסק שלך. התחל בהגדרת מפתח ה‑API, ואז למד חוזה ראשון — ומשם כל יום עבודה יחשב את עצמו אוטומטית.</p>
+          <div class="row">
+            <button class="btn primary" onclick="go('contracts')">למד חוזה חדש</button>
+            <button class="btn ghost" onclick="go('settings')">הגדרות ומפתח API</button>
+          </div>
+        </div>
+      </section>
+
+      <!-- CONTRACTS -->
+      <section class="view" id="view-contracts">
+        <div id="contractsList"></div>
+      </section>
+
+      <!-- WORKDAYS -->
+      <section class="view" id="view-workdays">
+        <div class="summ-bar" id="wdSumm"></div>
+        <div class="filters" id="wdFilters"></div>
+        <div id="workdaysList"></div>
+      </section>
+
+      <!-- CALENDAR -->
+      <section class="view" id="view-calendar">
+        <div class="cal-head">
+          <div class="cal-nav">
+            <button onclick="calMove(1)" title="הבא">‹</button>
+            <button onclick="calMove(-1)" title="הקודם">›</button>
+          </div>
+          <h2 id="calLabel"></h2>
+          <button class="btn sm ghost" onclick="calToday()">היום</button>
+          <div class="spacer" style="flex:1"></div>
+          <button class="btn primary sm" onclick="openWorkday()">+ יום עבודה</button>
+        </div>
+        <div class="calgrid" id="calGrid"></div>
+        <div class="cal-legend" id="calLegend"></div>
+      </section>
+
+      <!-- EXPENSES -->
+      <section class="view" id="view-expenses">
+        <div class="empty"><div class="big">↧</div><div>הוצאות ומע"מ תשומות — בקרוב.</div></div>
+      </section>
+
+      <!-- SETTINGS -->
+      <section class="view" id="view-settings">
+        <div class="grid" style="max-width:640px">
+          <div class="card" id="syncCard"></div>
+          <div class="card">
+            <h3 style="margin:0 0 4px;font-weight:500">מפתח Anthropic API</h3>
+            <p class="muted" style="margin:0 0 14px;font-size:13px;line-height:1.6">נשמר מקומית בדפדפן בלבד (localStorage). נדרש כדי לקרוא חוזים. <a href="https://console.anthropic.com/settings/keys" target="_blank" style="color:var(--accent)">השג מפתח →</a></p>
+            <label class="fld">מפתח (sk-ant-...)
+              <input type="password" id="setApiKey" placeholder="sk-ant-...">
+            </label>
+            <div style="height:12px"></div>
+            <button class="btn primary sm" onclick="saveApiKey()">שמור מפתח</button>
+            <span id="keySaveMsg" class="muted" style="margin-inline-start:10px;font-size:13px"></span>
+          </div>
+
+          <div class="card">
+            <div class="row" style="justify-content:space-between">
+              <h3 style="margin:0;font-weight:500">מסים והפרשות — עוסק מורשה</h3>
+              <span class="tag act" id="taxYearTag">שיעורים רשמיים · 2026</span>
+            </div>
+            <div class="notice" style="margin:12px 0 14px">מס הכנסה מחושב <b>מדורג (פרוגרסיבי)</b> על הרווח השנתי בניכוי נקודות זיכוי — לא אחוז שטוח. ההפרשות הן הערכה מדויקת לחיסכון; השומה הסופית נקבעת בסוף השנה מול רואה החשבון. מע"מ נגבה בנפרד ומועבר למדינה — אינו חלק מהרווח.</div>
+            <div class="grid" style="grid-template-columns:1fr 1fr 1fr">
+              <label class="fld">מע"מ %<input type="number" id="setVat" step="0.1"></label>
+              <label class="fld">נקודות זיכוי<input type="number" id="setCredits" step="0.25"></label>
+              <label class="fld">מטבע<input type="text" id="setCur"></label>
+            </div>
+            <div id="taxTables" style="margin-top:14px"></div>
+            <div class="src" style="margin-top:10px">מקורות: <a href="https://www.kolzchut.org.il/he/%D7%9E%D7%93%D7%A8%D7%92%D7%95%D7%AA_%D7%9E%D7%A1_%D7%94%D7%9B%D7%A0%D7%A1%D7%94" target="_blank">כל‑זכות — מס הכנסה</a> · <a href="https://www.btl.gov.il/Insurance/National%20Insurance/type_list/Self_Employed/Pages/rates.aspx" target="_blank">ביטוח לאומי — עצמאי</a></div>
+            <div style="border-top:1px solid var(--line);margin-top:16px;padding-top:14px">
+              <h4 style="margin:0 0 8px;font-weight:500">מחשבון הפרשה מהיר</h4>
+              <label class="fld">רווח חודשי (הכנסה פחות הוצאות) ₪<input type="number" id="qcGross" oninput="quickCalc()" placeholder="לדוגמה 20000"></label>
+              <div id="qcOut" class="muted" style="font-size:13px;margin-top:10px;line-height:1.8"></div>
+            </div>
+          </div>
+
+          <div class="card">
+            <h3 style="margin:0 0 4px;font-weight:500">כללי שעות נוספות (ברירת מחדל)</h3>
+            <p class="muted" style="margin:0 0 14px;font-size:13px;line-height:1.6">ברירות מחדל לחישוב ש"נ מעבר ליום הבסיס. המספרים המדויקים של הסכם 2008 נמצאים בנספחים — כשתעביר לי אותם אעדכן. בינתיים ניתן לכוונן כאן.</p>
+            <div class="grid" style="grid-template-columns:1fr 1fr 1fr">
+              <label class="fld">שעות יום בסיס (חול)<input type="number" id="setBase" step="0.5"></label>
+              <label class="fld">2 ש"נ ראשונות ×<input type="number" id="setOt1" step="0.05"></label>
+              <label class="fld">ש"נ מעבר לכך ×<input type="number" id="setOt2" step="0.05"></label>
+            </div>
+          </div>
+
+          <div class="card" id="backupCard"></div>
+
+          <button class="btn primary" onclick="saveSettings()">שמור הגדרות</button>
+        </div>
+      </section>
+
+    </div>
+  </main>
+</div>
+
+<!-- Contract review modal -->
+<div class="modal-bg" id="reviewModal">
+  <div class="modal">
+    <div class="modal-head">
+      <h2 id="reviewTitle">בדיקת תנאי החוזה</h2>
+      <span id="reviewConf"></span>
+      <button class="x" onclick="closeModal('reviewModal')">×</button>
+    </div>
+    <div class="modal-body" id="reviewBody"></div>
+    <div class="modal-foot">
+      <button class="btn primary" onclick="saveReviewedContract()">שמור חוזה</button>
+      <button class="btn ghost" onclick="closeModal('reviewModal')">ביטול</button>
+    </div>
+  </div>
+</div>
+
+<!-- Work day modal -->
+<div class="modal-bg" id="wdModal">
+  <div class="modal">
+    <div class="modal-head">
+      <h2 id="wdTitle">יום עבודה</h2>
+      <button class="x" onclick="closeModal('wdModal')">×</button>
+    </div>
+    <div class="modal-body" id="wdBody"></div>
+    <div class="modal-foot">
+      <button class="btn primary" onclick="saveWorkday()">שמור יום עבודה</button>
+      <button class="btn ghost" onclick="closeModal('wdModal')">ביטול</button>
+    </div>
+  </div>
+</div>
+
+<!-- Cloud sync auth modal -->
+<div class="modal-bg" id="authModal" style="z-index:70">
+  <div class="modal" style="width:min(440px,100%)">
+    <div class="modal-head">
+      <h2>סנכרון ענן — התחברות</h2>
+      <button class="x" onclick="closeModal('authModal')">×</button>
+    </div>
+    <div class="modal-body">
+      <p class="muted" style="margin:0 0 14px;font-size:13px;line-height:1.6">הזן את האימייל שלך — נשלח לך <b>קישור כניסה</b>. לחיצה עליו תכניס אותך אוטומטית, בלי סיסמה. השתמש באותו אימייל בכל מכשיר, וכל הנתונים יסתנכרנו.</p>
+      <label class="fld">אימייל<input type="email" id="au_email" autocomplete="email" placeholder="you@gmail.com"></label>
+      <div id="au_msg" style="font-size:13px;margin-top:12px;min-height:18px;color:var(--muted)"></div>
+    </div>
+    <div class="modal-foot">
+      <button class="btn primary" id="au_send" onclick="cloudSendLink()">שלח לי קישור כניסה</button>
+    </div>
+  </div>
+</div>
+
+<!-- Project modal -->
+<div class="modal-bg" id="projModal" style="z-index:60">
+  <div class="modal" style="width:min(560px,100%)">
+    <div class="modal-head">
+      <h2 id="projTitle">פרויקט</h2>
+      <button class="x" onclick="closeProjModal()">×</button>
+    </div>
+    <div class="modal-body" id="projBody"></div>
+    <div class="modal-foot">
+      <button class="btn primary" onclick="saveProject()">שמור פרויקט</button>
+      <button class="btn ghost" onclick="closeProjModal()">ביטול</button>
+      <button class="btn ghost" id="projDelBtn" style="margin-inline-start:auto;color:var(--bad)" onclick="deleteProjectFromModal()">מחק פרויקט</button>
+    </div>
+  </div>
+</div>
+
+<input type="file" id="contractFile" accept="application/pdf,image/*,.docx" style="display:none">
+
+<script>
+/* ============================================================
+   CINE FINANCE — single-file app
+   All data in localStorage. Claude API called directly (vision/PDF).
+   ============================================================ */
+const MODEL = 'claude-sonnet-4-5';
+const API_URL = 'https://api.anthropic.com/v1/messages';
+const LS = {
+  settings:'cf_settings', contracts:'cf_contracts',
+  workdays:'cf_workdays', expenses:'cf_expenses', projects:'cf_projects'
+};
+const PROJECT_COLORS=['#5f9ce8','#5fc88f','#e0b15e','#c98fe8','#e8685f','#5fd0e8','#e88f5f','#9fe85f','#8f9ce8','#e85fb0'];
+const DEFAULT_SETTINGS = {
+  apiKey:'', currency:'₪', baseHours:11, ot1:1.25, ot2:1.5,
+  // ---- Israeli tax rates — official, effective 1.1.2026 (editable) ----
+  vat:18,
+  creditPoints:2.25, creditPointMonthly:242, taxYear:2026,
+  // annual income-tax brackets [upToAnnual ₪, rate %], progressive, earned income
+  incomeBrackets:[[84120,10],[120720,14],[228000,20],[301200,31],[560280,35],[721560,47],[null,50]],
+  // National Insurance + health, self-employed, monthly bands (2026)
+  bituach:{reducedCeil:7703, reducedRate:7.7, fullRate:18, monthlyCeil:51910, minBase:3442}
+};
+
+/* ---------- storage helpers ---------- */
+function load(key, fallback){ try{ const v=localStorage.getItem(key); return v?JSON.parse(v):fallback; }catch(e){ return fallback; } }
+function save(key, val){ localStorage.setItem(key, JSON.stringify(val)); scheduleSave(); scheduleCloudPush(); }
+function settings(){
+  const s=Object.assign({}, DEFAULT_SETTINGS, load(LS.settings,{}));
+  // guard against stale/old-format saved values
+  if(typeof s.bituach!=='object' || !s.bituach) s.bituach=DEFAULT_SETTINGS.bituach;
+  if(!Array.isArray(s.incomeBrackets)) s.incomeBrackets=DEFAULT_SETTINGS.incomeBrackets;
+  return s;
+}
+
+/* ---------- Israeli tax engine (rates live in settings; see Settings view) ----------
+   Income tax is progressive on ANNUAL taxable profit, minus credit-point value.
+   National Insurance + health is banded on MONTHLY income with a ceiling.
+   These produce an accurate set-aside estimate; final assessment is year-end. */
+function incomeTaxAnnual(taxableAnnual){
+  let tax=0, prev=0;
+  for(const [upTo,rate] of settings().incomeBrackets){
+    const cap = upTo==null?Infinity:upTo;
+    if(taxableAnnual>prev){ tax += (Math.min(taxableAnnual,cap)-prev)*(rate/100); prev=cap; }
+    else break;
+  }
+  return Math.max(0,tax);
+}
+function creditAnnual(){ const s=settings(); return s.creditPoints*s.creditPointMonthly*12; }
+function incomeTaxNetAnnual(taxableAnnual){ return Math.max(0, incomeTaxAnnual(taxableAnnual)-creditAnnual()); }
+function bituachMonthly(income){
+  const b=settings().bituach;
+  if(income<=0) return 0;
+  const base=Math.min(Math.max(income,b.minBase), b.monthlyCeil);
+  const low=Math.min(base,b.reducedCeil)*(b.reducedRate/100);
+  const high=Math.max(0,base-b.reducedCeil)*(b.fullRate/100);
+  return low+high;
+}
+function uid(){ return Date.now().toString(36)+Math.random().toString(36).slice(2,7); }
+function esc(s){ return String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+function fmtMoney(n){ const s=settings(); return (Number(n)||0).toLocaleString('he-IL')+' '+s.currency; }
+
+/* ---------- navigation ---------- */
+const TITLES={dashboard:'דשבורד',contracts:'חוזים',workdays:'ימי עבודה',calendar:'לוח שנה',expenses:'הוצאות',settings:'הגדרות'};
+let _currentView='dashboard';
+function go(v){
+  _currentView=v;
+  document.querySelectorAll('.view').forEach(el=>el.classList.remove('active'));
+  document.getElementById('view-'+v).classList.add('active');
+  document.querySelectorAll('#nav button').forEach(b=>b.classList.toggle('active', b.dataset.view===v));
+  document.getElementById('pageTitle').textContent=TITLES[v];
+  renderTopActions(v);
+  if(v==='dashboard') renderDashboard();
+  if(v==='contracts') renderContracts();
+  if(v==='workdays') renderWorkdays();
+  if(v==='calendar') renderCalendar();
+  if(v==='settings') fillSettings();
+}
+document.getElementById('nav').addEventListener('click',e=>{ const b=e.target.closest('button'); if(b) go(b.dataset.view); });
+
+function renderTopActions(v){
+  const el=document.getElementById('topActions'); el.innerHTML='';
+  if(v==='contracts'){
+    const b=document.createElement('button'); b.className='btn primary'; b.textContent='למד חוזה חדש';
+    b.onclick=pickContractFile; el.appendChild(b);
+  }
+  if(v==='workdays'){
+    const b=document.createElement('button'); b.className='btn primary'; b.textContent='+ יום עבודה';
+    b.onclick=()=>openWorkday(); el.appendChild(b);
+  }
+}
+
+/* ---------- API key indicator ---------- */
+function refreshKeyPill(){
+  const has=!!settings().apiKey;
+  document.getElementById('keyDot').classList.toggle('ok',has);
+  document.getElementById('keyText').textContent= has?'מפתח API פעיל':'לא הוגדר מפתח API';
+}
+function saveApiKey(){
+  const s=settings(); s.apiKey=document.getElementById('setApiKey').value.trim(); save(LS.settings,s);
+  document.getElementById('keySaveMsg').textContent='נשמר ✓'; setTimeout(()=>document.getElementById('keySaveMsg').textContent='',2000);
+  refreshKeyPill();
+}
+function fillSettings(){
+  const s=settings();
+  document.getElementById('setApiKey').value=s.apiKey||'';
+  document.getElementById('setVat').value=s.vat;
+  document.getElementById('setCredits').value=s.creditPoints;
+  document.getElementById('setCur').value=s.currency;
+  document.getElementById('setBase').value=s.baseHours; document.getElementById('setOt1').value=s.ot1; document.getElementById('setOt2').value=s.ot2;
+  document.getElementById('taxYearTag').textContent='שיעורים רשמיים · '+s.taxYear;
+  renderTaxTables();
+  renderBackupUI();
+  renderSyncUI();
+}
+function saveSettings(){
+  const s=settings();
+  s.vat=+document.getElementById('setVat').value;
+  s.creditPoints=+document.getElementById('setCredits').value;
+  s.currency=document.getElementById('setCur').value||'₪';
+  s.baseHours=+document.getElementById('setBase').value; s.ot1=+document.getElementById('setOt1').value; s.ot2=+document.getElementById('setOt2').value;
+  s.apiKey=document.getElementById('setApiKey').value.trim();
+  save(LS.settings,s); refreshKeyPill(); renderTaxTables();
+  const m=document.getElementById('keySaveMsg'); m.textContent='ההגדרות נשמרו ✓'; setTimeout(()=>m.textContent='',2000);
+}
+function renderTaxTables(){
+  const s=settings();
+  const nf=n=>Math.round(n).toLocaleString('he-IL');
+  let rows='', prev=0;
+  for(const [upTo,rate] of s.incomeBrackets){
+    const fromM=nf(prev/12);
+    const toM = upTo==null?'ומעלה':nf(upTo/12);
+    rows+=`<tr><td>${rate}%</td><td>${upTo==null?fromM+' ₪ ומעלה':fromM+'–'+toM+' ₪'} לחודש</td></tr>`;
+    prev=upTo;
+  }
+  const b=s.bituach;
+  const el=document.getElementById('taxTables'); if(!el) return;
+  el.innerHTML=`
+    <div class="grid" style="grid-template-columns:1fr 1fr;gap:16px">
+      <div>
+        <div class="faint" style="font-size:12px;margin-bottom:6px">מדרגות מס הכנסה (${s.taxYear})</div>
+        <table class="taxtbl">${rows}</table>
+      </div>
+      <div>
+        <div class="faint" style="font-size:12px;margin-bottom:6px">ביטוח לאומי + בריאות · עצמאי (${s.taxYear})</div>
+        <table class="taxtbl">
+          <tr><td>${b.reducedRate}%</td><td>עד ${nf(b.reducedCeil)} ₪ לחודש</td></tr>
+          <tr><td>${b.fullRate}%</td><td>${nf(b.reducedCeil)}–${nf(b.monthlyCeil)} ₪ לחודש</td></tr>
+        </table>
+        <div class="faint" style="font-size:11px;margin-top:6px">תקרה: ${nf(b.monthlyCeil)} ₪/חודש · נק' זיכוי: ${b.minBase?nf(s.creditPointMonthly):''} ₪</div>
+      </div>
+    </div>`;
+}
+function quickCalc(){
+  const g=+document.getElementById('qcGross').value||0;
+  const s=settings();
+  const f=n=>Math.round(n).toLocaleString('he-IL')+' ₪';
+  const out=document.getElementById('qcOut');
+  if(g<=0){ out.innerHTML=''; return; }
+  const vat=g*(s.vat/100);
+  const taxM=incomeTaxNetAnnual(g*12)/12;
+  const bit=bituachMonthly(g);
+  const take=Math.max(0,g-taxM-bit);
+  out.innerHTML=
+    `על רווח של <b>${f(g)}</b> בחודש:<br>`+
+    `• מס הכנסה (מדורג, אחרי נק' זיכוי): <b>${f(taxM)}</b><br>`+
+    `• ביטוח לאומי + בריאות: <b>${f(bit)}</b><br>`+
+    `• <span style="color:var(--good)">נשאר לך מהרווח: <b>${f(take)}</b></span><br>`+
+    `<span class="faint">בנוסף תגבה מע"מ ${s.vat}% (${f(vat)}) — אינו שלך, מועבר למדינה.</span>`;
+}
+
+/* ---------- Claude API ---------- */
+function apiHeaders(){
+  return {
+    'x-api-key': settings().apiKey,
+    'anthropic-version':'2023-06-01',
+    'anthropic-dangerous-direct-browser-access':'true',
+    'content-type':'application/json'
+  };
+}
+async function callClaude(system, contentBlocks, maxTokens=2000){
+  if(!settings().apiKey) throw new Error('לא הוגדר מפתח API. עבור להגדרות.');
+  const res = await fetch(API_URL,{
+    method:'POST', headers:apiHeaders(),
+    body: JSON.stringify({ model:MODEL, max_tokens:maxTokens, system, messages:[{role:'user',content:contentBlocks}] })
+  });
+  if(!res.ok){ const t=await res.text(); throw new Error('שגיאת API ('+res.status+'): '+t.slice(0,300)); }
+  const data=await res.json();
+  return (data.content||[]).map(b=>b.text||'').join('');
+}
+
+/* ---------- file → content block for the API ---------- */
+function fileToBase64(file){
+  return new Promise((resolve,reject)=>{
+    const r=new FileReader();
+    r.onload=()=>resolve(String(r.result).split(',')[1]);
+    r.onerror=reject; r.readAsDataURL(file);
+  });
+}
+async function buildContentBlock(file){
+  const name=(file.name||'').toLowerCase();
+  if(file.type==='application/pdf' || name.endsWith('.pdf')){
+    const b64=await fileToBase64(file);
+    return {type:'document', source:{type:'base64', media_type:'application/pdf', data:b64}};
+  }
+  if(file.type.startsWith('image/')){
+    const b64=await fileToBase64(file);
+    const mt = file.type || 'image/png';
+    return {type:'image', source:{type:'base64', media_type:mt, data:b64}};
+  }
+  if(name.endsWith('.docx')){
+    const buf=await file.arrayBuffer();
+    const out=await mammoth.extractRawText({arrayBuffer:buf});
+    return {type:'text', text:'תוכן החוזה (חולץ מ-DOCX):\n\n'+out.value};
+  }
+  // plain text fallback
+  const txt=await file.text();
+  return {type:'text', text:'תוכן החוזה:\n\n'+txt};
+}
+
+/* ---------- Contract schema + extraction prompt ---------- */
+const SCHEMA_FIELDS = [
+  ['name','שם החוזה'],['type','סוג'],['producer','מפיק/חברת הפקה'],['channel','ערוץ/לקוח'],
+  ['project','שם ההפקה/פרויקט'],['role','תפקיד'],
+  ['dayRate','תעריף יומי'],['currency','מטבע'],
+  ['baseDayHours','שעות יום בסיס (חול)'],['baseDayHoursFriEve','שעות יום בסיס (שישי/ערב חג)'],
+  ['paymentTerms','תנאי תשלום'],['overtimeRules','כללי שעות נוספות'],
+  ['invoiceFlow','זרימת חשבוניות'],['travelRules','כללי נסיעות'],['mealRules','כללי הסעדה'],
+  ['relationship','סוג ההתקשרות'],['notes','הערות']
+];
+const EXTRACT_SYS = `אתה עוזר משפטי-פיננסי לצלם קולנוע עצמאי (פרילנסר) בישראל, חבר איגוד אקט, במעמד עוסק מורשה.
+המשתמש יעלה חוזה (לרוב הסכם העסקה של איש צוות בהפקה — אקט או חוזה פרטי). קרא אותו בעיון, כולל סריקות/תמונות.
+חלץ את התנאים למבנה JSON מדויק. השב אך ורק ב-JSON תקין, ללא טקסט נוסף, לפי הסכמה:
+{
+ "name": "שם תיאורי קצר לחוזה",
+ "type": "אחד מ: ACT חד-יומי | ACT שבועי | ACT סדרה | פרטי | אחר",
+ "producer": "שם המפיקה/חברת ההפקה אם מופיע",
+ "channel": "ערוץ/גוף משדר/לקוח אם מופיע",
+ "project": "שם ההפקה/התכנית אם מופיע",
+ "role": "תפקיד איש הצוות אם מופיע",
+ "dayRate": מספר או null (התעריף היומי בש\\"ח, בלי מע\\"מ; אם כתוב 'בתוספת מע\\"מ' ציין plusVat),
+ "plusVat": true/false (האם התעריף הוא לפני מע\\"מ),
+ "currency": "₪ כברירת מחדל",
+ "baseDayHours": מספר או null (אורך יום העבודה הרגיל בשעות ברוטו),
+ "baseDayHoursFriEve": מספר או null (אורך יום בשישי/ערב חג),
+ "paymentTerms": "תנאי התשלום, למשל שוטף+30",
+ "overtimeRules": "תיאור כללי שעות נוספות כפי שמופיע",
+ "invoiceFlow": "סדר הוצאת החשבוניות (חשבונית עסקה לפני / חשבונית מס אחרי וכו')",
+ "travelRules": "כללי נסיעה/זמן נסיעה אם מופיעים",
+ "mealRules": "כללי הסעדה/הפסקות אם מופיעים",
+ "relationship": "סוג ההתקשרות, למשל מזמין-קבלן עצמאי",
+ "notes": "כל תנאי חשוב אחר בקצרה",
+ "confidence": "high | medium | low — עד כמה הצלחת לקרוא ולחלץ בביטחון"
+}
+אם שדה לא מופיע בחוזה — החזר null או מחרוזת ריקה. אל תמציא מספרים.`;
+
+/* ---------- Learn-a-contract flow ---------- */
+let _pendingContract=null;
+function pickContractFile(){ document.getElementById('contractFile').click(); }
+document.getElementById('contractFile').addEventListener('change', e=>{ const f=e.target.files[0]; if(f) learnContract(f); e.target.value=''; });
+
+async function learnContract(file){
+  go('contracts');
+  const host=document.getElementById('contractsList');
+  host.insertAdjacentHTML('afterbegin', `<div class="statusline" id="learnStatus"><span class="spin"></span>קורא את החוזה "${esc(file.name)}" ומחלץ תנאים…</div>`);
+  try{
+    const block=await buildContentBlock(file);
+    const text=await callClaude(EXTRACT_SYS,[block,{type:'text',text:'חלץ את תנאי החוזה ל-JSON לפי הסכמה.'}],2500);
+    const data=parseJSON(text);
+    if(!data) throw new Error('לא הצלחתי לפענח את תשובת המודל כ-JSON.');
+    data.id=uid(); data.sourceFile=file.name; data.createdAt=Date.now();
+    if(!data.currency) data.currency=settings().currency;
+    _pendingContract=data;
+    openReview(data);
+  }catch(err){
+    const s=document.getElementById('learnStatus');
+    if(s){ s.classList.add('err'); s.innerHTML='⚠ '+esc(err.message); }
+  }finally{
+    const s=document.getElementById('learnStatus'); if(s && !s.classList.contains('err')) s.remove();
+  }
+}
+function parseJSON(text){
+  try{ return JSON.parse(text); }catch(e){}
+  const a=text.indexOf('{'), b=text.lastIndexOf('}');
+  if(a>=0 && b>a){ try{ return JSON.parse(text.slice(a,b+1)); }catch(e){} }
+  return null;
+}
+
+/* ---------- Review modal ---------- */
+function openReview(data){
+  const conf=(data.confidence||'medium').toLowerCase();
+  const confMap={high:['high','ביטחון גבוה'],medium:['med','ביטחון בינוני'],low:['low','ביטחון נמוך']};
+  const cm=confMap[conf]||confMap.medium;
+  document.getElementById('reviewConf').innerHTML=`<span class="confbadge ${cm[0]}">${cm[1]}</span>`;
+  const fields = [
+    ['name','שם החוזה','text'],['type','סוג','text'],
+    ['producer','מפיק/חברת הפקה','text'],['channel','ערוץ/לקוח','text'],
+    ['project','שם ההפקה/פרויקט','text'],['role','תפקיד','text'],
+    ['dayRate','תעריף יומי','number'],['currency','מטבע','text'],
+    ['baseDayHours','שעות יום בסיס (חול)','number'],['baseDayHoursFriEve','שעות (שישי/ערב חג)','number'],
+    ['paymentTerms','תנאי תשלום','text'],['relationship','סוג ההתקשרות','text'],
+  ];
+  let html='<div class="grid" style="grid-template-columns:1fr 1fr">';
+  for(const [k,lbl,t] of fields){
+    const v=data[k]==null?'':data[k];
+    html+=`<label class="fld">${lbl}<input data-k="${k}" type="${t}" value="${esc(v)}"></label>`;
+  }
+  html+='</div>';
+  html+=`<label class="fld" style="margin-top:12px"><span class="row" style="gap:8px"><input type="checkbox" data-k="plusVat" ${data.plusVat?'checked':''} style="width:auto"> התעריף הוא לפני מע"מ (יתווסף מע"מ ${settings().vat}%)</span></label>`;
+  for(const [k,lbl] of [['overtimeRules','כללי שעות נוספות'],['invoiceFlow','זרימת חשבוניות'],['travelRules','כללי נסיעות'],['mealRules','כללי הסעדה'],['notes','הערות']]){
+    const v=data[k]==null?'':data[k];
+    html+=`<label class="fld" style="margin-top:10px">${lbl}<textarea data-k="${k}" rows="2">${esc(v)}</textarea></label>`;
+  }
+  html+=`<p class="faint" style="font-size:12px;margin-top:14px">חולץ מתוך: ${esc(data.sourceFile||'—')}. בדוק את הנתונים, ערוך מה שצריך, ושמור.</p>`;
+  document.getElementById('reviewBody').innerHTML=html;
+  openModal('reviewModal');
+}
+function saveReviewedContract(){
+  const d=Object.assign({},_pendingContract);
+  document.querySelectorAll('#reviewBody [data-k]').forEach(el=>{
+    const k=el.dataset.k;
+    if(el.type==='checkbox') d[k]=el.checked;
+    else if(el.type==='number') d[k]=el.value===''?null:Number(el.value);
+    else d[k]=el.value;
+  });
+  const list=load(LS.contracts,[]);
+  const i=list.findIndex(c=>c.id===d.id);
+  if(i>=0) list[i]=d; else list.push(d);
+  save(LS.contracts,list);
+  closeModal('reviewModal'); _pendingContract=null;
+  renderContracts();
+}
+
+/* ---------- Contracts list ---------- */
+function renderContracts(){
+  const list=load(LS.contracts,[]);
+  const host=document.getElementById('contractsList');
+  if(!list.length){
+    host.innerHTML=`<div class="dropzone" id="dz" onclick="pickContractFile()">
+      <div class="ic">❒</div><h3>למד חוזה ראשון</h3>
+      <p class="muted" style="margin:0">גרור לכאן קובץ חוזה (PDF / תמונה / סריקה / DOCX) או לחץ לבחירה.<br>Claude יקרא אותו ויחלץ את התנאים אוטומטית.</p>
+    </div>`;
+    wireDropzone();
+    return;
+  }
+  let html='<div class="clist">';
+  for(const c of list){
+    const rate=c.dayRate!=null?fmtMoney(c.dayRate)+(c.plusVat?' +מע"מ':''):'—';
+    const isAct=(c.type||'').includes('ACT');
+    html+=`<div class="ccard">
+      <button class="del" title="מחק" onclick="deleteContract('${c.id}')">🗑</button>
+      <h3>${esc(c.name||'חוזה ללא שם')}</h3>
+      <div class="meta"><span class="tag ${isAct?'act':''}">${esc(c.type||'—')}</span> ${esc(c.project||'')}</div>
+      <div class="kv"><span>תעריף יומי</span><span>${rate}</span></div>
+      <div class="kv"><span>יום בסיס</span><span>${c.baseDayHours?esc(c.baseDayHours)+' ש\'':'—'}</span></div>
+      <div class="kv"><span>תנאי תשלום</span><span>${esc(c.paymentTerms||'—')}</span></div>
+      <div class="actions"><button class="btn sm ghost" onclick="editContract('${c.id}')">פתח / ערוך</button></div>
+    </div>`;
+  }
+  html+='</div>';
+  host.innerHTML=html;
+}
+function editContract(id){ const c=load(LS.contracts,[]).find(x=>x.id===id); if(c){ _pendingContract=c; openReview(c); } }
+function deleteContract(id){
+  if(!confirm('למחוק את החוזה?')) return;
+  save(LS.contracts, load(LS.contracts,[]).filter(c=>c.id!==id));
+  renderContracts();
+}
+function wireDropzone(){
+  const dz=document.getElementById('dz'); if(!dz) return;
+  ['dragover','dragenter'].forEach(ev=>dz.addEventListener(ev,e=>{e.preventDefault();dz.classList.add('over');}));
+  ['dragleave','drop'].forEach(ev=>dz.addEventListener(ev,e=>{e.preventDefault();dz.classList.remove('over');}));
+  dz.addEventListener('drop',e=>{ const f=e.dataTransfer.files[0]; if(f) learnContract(f); });
+}
+
+/* ============================================================
+   WORK DAYS — each day links to a contract and auto-computes pay.
+   Pay = base day rate + overtime + gear rental + travel + other.
+   Overtime: hours beyond the base day, first 2h × ot1, rest × ot2,
+   on an hourly rate of dayRate / baseHours. VAT added separately.
+   ============================================================ */
+const WD_STATUS=[
+  ['unissued','טרם הופקה'],['issued','הופקה'],['paid','שולם'],['overdue','באיחור']
+];
+function statusLabel(k){ const f=WD_STATUS.find(x=>x[0]===k); return f?f[1]:k; }
+
+function contractById(id){ return load(LS.contracts,[]).find(c=>c.id===id)||null; }
+function projectById(id){ return load(LS.projects,[]).find(p=>p.id===id)||null; }
+/* A day's terms come from its own contract if set, else from its project's contract. */
+function resolveContract(wd){
+  if(wd.contractId) return contractById(wd.contractId);
+  const p=wd.projectId?projectById(wd.projectId):null;
+  if(p && p.contractId) return contractById(p.contractId);
+  return null;
+}
+function projColor(id){ const p=projectById(id); return p&&p.color?p.color:'#6b7280'; }
+function nextProjColor(){ const used=load(LS.projects,[]).map(p=>p.color); return PROJECT_COLORS.find(c=>!used.includes(c)) || PROJECT_COLORS[load(LS.projects,[]).length%PROJECT_COLORS.length]; }
+/* The label shown for a day's "production" — project name first, else client, else contract project. */
+function dayLabel(w){
+  const p=w.projectId?projectById(w.projectId):null;
+  if(p) return p.name||'פרויקט';
+  if(w.client) return w.client;
+  const c=resolveContract(w); return (c&&c.project)||'';
+}
+
+/* Core pay calculator → returns a full breakdown */
+function computePay(wd){
+  const s=settings();
+  const c=resolveContract(wd);
+  const rate = wd.dayRate!=null?+wd.dayRate : (c&&c.dayRate!=null?+c.dayRate:0);
+  const plusVat = wd.plusVat!=null?!!wd.plusVat : (c?!!c.plusVat:true);
+  const baseHours = (c&&c.baseDayHours)? +c.baseDayHours : +s.baseHours||11;
+  const hourly = baseHours>0?rate/baseHours:0;
+  const worked = +wd.hoursWorked||0;
+  let otHours = Math.max(0, worked-baseHours);
+  const ot1h=Math.min(otHours,2), ot2h=Math.max(0,otHours-2);
+  const otPay = ot1h*hourly*(+s.ot1||1.25) + ot2h*hourly*(+s.ot2||1.5);
+  const gear=+wd.gearRental||0, travel=+wd.travel||0, other=+wd.otherAdd||0;
+  const sub = rate + otPay + gear + travel + other;
+  const vat = plusVat? sub*((+s.vat||0)/100) : 0;
+  return {
+    rate, plusVat, baseHours, hourly, worked, otHours, ot1h, ot2h,
+    otPay, gear, travel, other, sub, vat, total:sub+vat,
+    contractName: c?c.name:null
+  };
+}
+
+let _wdFilter='all', _wdView='list';
+function renderWorkdays(){
+  const list=load(LS.workdays,[]).slice().sort((a,b)=>(b.date||'').localeCompare(a.date||''));
+  const host=document.getElementById('workdaysList');
+  const contracts=load(LS.contracts,[]);
+
+  // summary (always over full list)
+  renderWdSummary(list);
+  renderWdFilters();
+
+  let rows=list;
+  if(_wdFilter==='confirmed') rows=list.filter(w=>w.tentative!==true);
+  else if(_wdFilter==='tentative') rows=list.filter(w=>w.tentative===true);
+  else if(_wdFilter==='unpaid') rows=list.filter(w=>w.status!=='paid' && w.tentative!==true);
+
+  if(!list.length){
+    host.innerHTML=`<div class="empty"><div class="big">☰</div>
+      <div>אין עדיין ימי עבודה.</div>
+      <div style="margin-top:14px"><button class="btn primary" onclick="openWorkday()">+ הוסף יום עבודה ראשון</button></div>
+      ${contracts.length?'':'<div class="muted" style="margin-top:12px;font-size:13px">טיפ: למד חוזה קודם — כך יום העבודה יחשב את שכרו אוטומטית.</div>'}
+    </div>`;
+    return;
+  }
+  if(!rows.length){ host.innerHTML='<div class="empty"><div class="big">∅</div><div>אין ימי עבודה בסינון הזה.</div></div>'; return; }
+
+  host.innerHTML = _wdView==='project' ? wdGroupedHtml(rows) : wdListHtml(rows);
+}
+
+function wdRowHtml(w,{showName=true}={}){
+  const p=computePay(w);
+  const hrs=p.worked>0?`${p.worked} ש'${p.otHours>0?` <span class="faint">(+${(+p.otHours).toFixed(1).replace(/\.0$/,'')} ש"נ)</span>`:''}`:'—';
+  const st = w.tentative? `<span class="st tentative"><span class="d"></span>משוער</span>`
+                        : `<span class="st ${w.status||'unissued'}"><span class="d"></span>${statusLabel(w.status||'unissued')}</span>`;
+  let nameCell='';
+  if(showName){
+    const dot=`<span class="cdot" style="background:${w.projectId?projColor(w.projectId):'#6b7280'}"></span> `;
+    const name=esc(dayLabel(w)||'—');
+    const cname=p.contractName?`<div class="faint" style="font-size:11.5px">${esc(p.contractName)}</div>`:'';
+    nameCell=`<td>${dot}${name}${cname}</td>`;
+  }
+  return `<tr onclick="openWorkday('${w.id}')">
+    <td class="num">${fmtDate(w.date)}</td>
+    ${nameCell}
+    <td>${esc(w.role||'—')}</td>
+    <td class="num">${hrs}</td>
+    <td class="num gross">${fmtMoney(Math.round(p.total))}${p.plusVat?'<span class="faint" style="font-weight:400"> כולל מע"מ</span>':''}</td>
+    <td>${st}</td>
+    <td onclick="event.stopPropagation()"><button class="rowdel" title="מחק" onclick="deleteWorkday('${w.id}')">🗑</button></td>
+  </tr>`;
+}
+
+function wdListHtml(rows){
+  let html='<div class="tbl-wrap"><table class="data"><thead><tr>'+
+    '<th>תאריך</th><th>הפקה / לקוח</th><th>תפקיד</th><th>שעות</th><th>שכר (ברוטו)</th><th>סטטוס</th><th></th>'+
+    '</tr></thead><tbody>';
+  for(const w of rows) html+=wdRowHtml(w);
+  return html+'</tbody></table></div>';
+}
+
+function wdGroupedHtml(rows){
+  // group by projectId; null → '' (no project), shown last
+  const groups=new Map();
+  for(const w of rows){ const k=w.projectId||''; if(!groups.has(k)) groups.set(k,[]); groups.get(k).push(w); }
+  // order: projects by most-recent day desc, "no project" last
+  const keys=[...groups.keys()].sort((a,b)=>{
+    if(a==='') return 1; if(b==='') return -1;
+    const la=groups.get(a)[0].date||'', lb=groups.get(b)[0].date||''; return lb.localeCompare(la);
+  });
+  let html='';
+  for(const k of keys){
+    const days=groups.get(k);
+    const proj=k?projectById(k):null;
+    const color=proj?(proj.color||'#6b7280'):'#6b7280';
+    let gross=0, unpaid=0; for(const w of days){ const p=computePay(w); if(w.tentative!==true){ gross+=p.total; if(w.status!=='paid') unpaid+=p.total; } }
+    const title = proj? esc(proj.name||'פרויקט') : 'ללא פרויקט';
+    const meta = proj && proj.client? `<span class="pmeta">· ${esc(proj.client)}</span>`:'';
+    const editBtn = proj? `<button class="edit" title="ערוך פרויקט" onclick="event.stopPropagation();openProject('${proj.id}')">✎</button>`:'';
+    let body='<table class="data"><thead><tr><th>תאריך</th><th>תפקיד</th><th>שעות</th><th>שכר (ברוטו)</th><th>סטטוס</th><th></th></tr></thead><tbody>';
+    for(const w of days) body+=wdRowHtml(w,{showName:false});
+    body+='</tbody></table>';
+    html+=`<div class="pgroup" style="border-inline-start:0">
+      <div class="pgroup-head" style="border-inline-start-color:${color}" onclick="this.nextElementSibling.style.display=this.nextElementSibling.style.display==='none'?'block':'none'">
+        <span class="cdot" style="background:${color}"></span>
+        <h3>${title}</h3>${meta}${editBtn}
+        <div class="psum"><span class="pn">${days.length} ימים${unpaid>0?` · ${fmtMoney(Math.round(unpaid))} פתוח`:''}</span><span class="pg">${fmtMoney(Math.round(gross))}</span></div>
+      </div>
+      <div>${body}</div>
+    </div>`;
+  }
+  return html;
+}
+
+function renderWdFilters(){
+  const opts=[['all','הכל'],['confirmed','מאושרים'],['tentative','משוערים'],['unpaid','ממתינים לתשלום']];
+  const chips=opts.map(([k,l])=>`<button class="chip ${_wdFilter===k?'on':''}" onclick="setWdFilter('${k}')">${l}</button>`).join('');
+  const tog=`<div class="viewtog">
+    <button class="${_wdView==='list'?'on':''}" onclick="setWdView('list')">רשימה</button>
+    <button class="${_wdView==='project'?'on':''}" onclick="setWdView('project')">לפי פרויקט</button>
+  </div>`;
+  document.getElementById('wdFilters').innerHTML=chips+tog;
+}
+function setWdFilter(k){ _wdFilter=k; renderWorkdays(); }
+function setWdView(v){ _wdView=v; renderWorkdays(); }
+
+function renderWdSummary(list){
+  const now=new Date(), ym=now.getFullYear()+'-'+String(now.getMonth()+1).padStart(2,'0');
+  const month=list.filter(w=>(w.date||'').startsWith(ym) && w.tentative!==true);
+  let gross=0, exVat=0, owed=0;
+  for(const w of month){ const p=computePay(w); gross+=p.total; exVat+=p.sub; }
+  for(const w of list){ if(w.tentative===true) continue; const p=computePay(w); if(w.status==='issued'||w.status==='overdue') owed+=p.total; }
+  const el=document.getElementById('wdSumm');
+  el.innerHTML=
+    `<div class="summ"><div class="k">ימי עבודה החודש</div><div class="v">${month.length}</div></div>`+
+    `<div class="summ"><div class="k">הכנסה החודש (כולל מע"מ)</div><div class="v gold">${fmtMoney(Math.round(gross))}</div></div>`+
+    `<div class="summ"><div class="k">מתוכם לפני מע"מ</div><div class="v">${fmtMoney(Math.round(exVat))}</div></div>`+
+    `<div class="summ"><div class="k">ממתין לתשלום</div><div class="v">${fmtMoney(Math.round(owed))}</div></div>`;
+}
+
+/* ---------- Work day modal ---------- */
+let _editingWdId=null;
+function openWorkday(id, presetDate){
+  _editingWdId=id||null;
+  const contracts=load(LS.contracts,[]);
+  const projects=load(LS.projects,[]);
+  const w = id? (load(LS.workdays,[]).find(x=>x.id===id)||{}) : {
+    date:presetDate||new Date().toISOString().slice(0,10), status:'unissued', tentative:false
+  };
+  document.getElementById('wdTitle').textContent = id?'עריכת יום עבודה':'יום עבודה חדש';
+  const pOpts = '<option value="">— ללא פרויקט —</option>'+
+    projects.map(p=>`<option value="${p.id}" ${w.projectId===p.id?'selected':''}>${esc(p.name||'פרויקט')}</option>`).join('')+
+    '<option value="__new">+ פרויקט חדש…</option>';
+  const cOpts = '<option value="">— יורש מהפרויקט / ידני —</option>'+
+    contracts.map(c=>`<option value="${c.id}" ${w.contractId===c.id?'selected':''}>${esc(c.name||'חוזה')}${c.project?' · '+esc(c.project):''}</option>`).join('');
+  const stOpts = WD_STATUS.map(([k,l])=>`<option value="${k}" ${ (w.status||'unissued')===k?'selected':''}>${l}</option>`).join('');
+  document.getElementById('wdBody').innerHTML=`
+    <div class="grid" style="grid-template-columns:1fr 1fr">
+      <label class="fld">תאריך<input type="date" id="wd_date" value="${esc(w.date||'')}"></label>
+      <label class="fld">פרויקט<select id="wd_project" onchange="onWdProjectChange()">${pOpts}</select></label>
+      <label class="fld">חוזה מקושר<select id="wd_contract" onchange="onWdContractChange()">${cOpts}</select></label>
+      <label class="fld">תפקיד<input type="text" id="wd_role" value="${esc(w.role||'')}" placeholder="צלם / מפעיל..."></label>
+      <label class="fld">לקוח / הפקה (אם שונה)<input type="text" id="wd_client" value="${esc(w.client||'')}" placeholder="ברירת מחדל מהפרויקט"></label>
+      <label class="fld">תעריף יומי ₪<input type="number" id="wd_rate" value="${w.dayRate!=null?esc(w.dayRate):''}" oninput="renderWdPreview()" placeholder="מהחוזה אם ריק"></label>
+      <label class="fld">שעות עבודה בפועל<input type="number" id="wd_hours" step="0.5" value="${w.hoursWorked!=null?esc(w.hoursWorked):''}" oninput="renderWdPreview()" placeholder="לחישוב ש\\"נ"></label>
+      <label class="fld">השכרת ציוד ₪<input type="number" id="wd_gear" value="${w.gearRental!=null?esc(w.gearRental):''}" oninput="renderWdPreview()"></label>
+      <label class="fld">נסיעות ₪<input type="number" id="wd_travel" value="${w.travel!=null?esc(w.travel):''}" oninput="renderWdPreview()"></label>
+      <label class="fld">תוספת אחרת ₪<input type="number" id="wd_other" value="${w.otherAdd!=null?esc(w.otherAdd):''}" oninput="renderWdPreview()"></label>
+      <label class="fld">סטטוס תשלום<select id="wd_status">${stOpts}</select></label>
+    </div>
+    <label class="fld" style="margin-top:12px"><span class="row" style="gap:8px">
+      <input type="checkbox" id="wd_plusvat" ${ (w.plusVat!=null?w.plusVat:true)?'checked':''} style="width:auto" onchange="renderWdPreview()"> התעריף לפני מע"מ (יתווסף מע"מ ${settings().vat}%)
+    </span></label>
+    <label class="fld" style="margin-top:10px"><span class="row" style="gap:8px">
+      <input type="checkbox" id="wd_tentative" ${w.tentative?'checked':''} style="width:auto"> יום משוער / טנטטיבי (לא סופי — לא נספר בהכנסה בפועל)
+    </span></label>
+    <label class="fld" style="margin-top:10px">הערות<textarea id="wd_notes" rows="2">${esc(w.notes||'')}</textarea></label>
+    <div id="wdPreview"></div>`;
+  _prevProjSel = w.projectId||'';
+  renderWdPreview();
+  openModal('wdModal');
+}
+let _prevProjSel='';
+function onWdProjectChange(){
+  const sel=document.getElementById('wd_project');
+  if(sel.value==='__new'){ sel.value=_prevProjSel; openProject(null, true); return; }
+  _prevProjSel=sel.value;
+  const p=sel.value?projectById(sel.value):null;
+  if(p){
+    const clientEl=document.getElementById('wd_client'); clientEl.placeholder=p.client||'ברירת מחדל מהפרויקט';
+    const c=p.contractId?contractById(p.contractId):null;
+    if(c){
+      if(c.plusVat!=null) document.getElementById('wd_plusvat').checked=!!c.plusVat;
+      const roleEl=document.getElementById('wd_role'); if(c.role && !roleEl.value) roleEl.value=c.role;
+    }
+  }
+  renderWdPreview();
+}
+function onWdContractChange(){
+  const cid=document.getElementById('wd_contract').value;
+  const c=cid?contractById(cid):null;
+  if(c){
+    if(c.plusVat!=null) document.getElementById('wd_plusvat').checked=!!c.plusVat;
+    const roleEl=document.getElementById('wd_role'); if(c.role && !roleEl.value) roleEl.value=c.role;
+  }
+  renderWdPreview();
+}
+function readWdForm(){
+  const v=id=>document.getElementById(id).value;
+  const num=id=>{ const x=v(id); return x===''?null:Number(x); };
+  const projVal=v('wd_project');
+  return {
+    date:v('wd_date'), projectId:(projVal&&projVal!=='__new')?projVal:null, contractId:v('wd_contract')||null,
+    client:v('wd_client'), role:v('wd_role'),
+    dayRate:num('wd_rate'), hoursWorked:num('wd_hours'),
+    gearRental:num('wd_gear'), travel:num('wd_travel'), otherAdd:num('wd_other'),
+    plusVat:document.getElementById('wd_plusvat').checked,
+    tentative:document.getElementById('wd_tentative').checked,
+    status:v('wd_status'), notes:v('wd_notes')
+  };
+}
+function renderWdPreview(){
+  const p=computePay(readWdForm());
+  const f=n=>Math.round(n).toLocaleString('he-IL')+' ₪';
+  let lines=`<div class="ln"><span>תעריף יום הבסיס</span><span class="num">${f(p.rate)}</span></div>`;
+  if(p.otPay>0) lines+=`<div class="ln"><span>שעות נוספות (${(+p.otHours).toFixed(1).replace(/\.0$/,'')} ש' · ${p.ot1h>0?'×'+settings().ot1:''}${p.ot2h>0?' / ×'+settings().ot2:''})</span><span class="num">${f(p.otPay)}</span></div>`;
+  if(p.gear>0) lines+=`<div class="ln"><span>השכרת ציוד</span><span class="num">${f(p.gear)}</span></div>`;
+  if(p.travel>0) lines+=`<div class="ln"><span>נסיעות</span><span class="num">${f(p.travel)}</span></div>`;
+  if(p.other>0) lines+=`<div class="ln"><span>תוספת אחרת</span><span class="num">${f(p.other)}</span></div>`;
+  lines+=`<div class="ln"><span>סה"כ לפני מע"מ</span><span class="num">${f(p.sub)}</span></div>`;
+  if(p.vat>0) lines+=`<div class="ln"><span>מע"מ ${settings().vat}%</span><span class="num">${f(p.vat)}</span></div>`;
+  lines+=`<div class="ln tot"><span>סה"כ בחשבונית</span><span class="num">${f(p.total)}</span></div>`;
+  document.getElementById('wdPreview').innerHTML=`<div class="faint" style="font-size:12px;margin:14px 0 4px">חישוב שכר אוטומטי${p.contractName?' · לפי חוזה "'+esc(p.contractName)+'"':''}</div><div class="paybreak">${lines}</div>`;
+}
+function saveWorkday(){
+  const d=readWdForm();
+  if(!d.date){ alert('יש לבחור תאריך.'); return; }
+  const list=load(LS.workdays,[]);
+  if(_editingWdId){ const i=list.findIndex(x=>x.id===_editingWdId); if(i>=0) d.id=_editingWdId, list[i]=Object.assign({},list[i],d); }
+  else { d.id=uid(); d.createdAt=Date.now(); list.push(d); }
+  save(LS.workdays,list);
+  closeModal('wdModal'); _editingWdId=null;
+  renderWorkdays();
+}
+function deleteWorkday(id){
+  if(!confirm('למחוק את יום העבודה?')) return;
+  save(LS.workdays, load(LS.workdays,[]).filter(w=>w.id!==id));
+  renderWorkdays();
+}
+function fmtDate(iso){
+  if(!iso) return '—';
+  const d=new Date(iso+'T00:00:00'); if(isNaN(d)) return esc(iso);
+  const days=['א׳','ב׳','ג׳','ד׳','ה׳','ו׳','ש׳'];
+  return d.toLocaleDateString('he-IL',{day:'2-digit',month:'2-digit',year:'2-digit'})+' · '+days[d.getDay()];
+}
+
+/* ============================================================
+   PROJECTS — a gig that can span several work days. Holds the
+   default client + contract + a color (used across the calendar).
+   ============================================================ */
+let _editingProjId=null, _projReturnToWd=false, _projColor=PROJECT_COLORS[0];
+function openProject(id, fromWorkday){
+  _editingProjId=id||null; _projReturnToWd=!!fromWorkday;
+  const contracts=load(LS.contracts,[]);
+  const p = id? (projectById(id)||{}) : {color:nextProjColor()};
+  _projColor = p.color||nextProjColor();
+  document.getElementById('projTitle').textContent = id?'עריכת פרויקט':'פרויקט חדש';
+  document.getElementById('projDelBtn').style.display = id?'inline-flex':'none';
+  const cOpts='<option value="">— ללא חוזה —</option>'+
+    contracts.map(c=>`<option value="${c.id}" ${p.contractId===c.id?'selected':''}>${esc(c.name||'חוזה')}${c.project?' · '+esc(c.project):''}</option>`).join('');
+  document.getElementById('projBody').innerHTML=`
+    <div class="grid" style="grid-template-columns:1fr 1fr">
+      <label class="fld">שם הפרויקט<input type="text" id="pj_name" value="${esc(p.name||'')}" placeholder="לדוגמה: פרסומת רכב — אגם"></label>
+      <label class="fld">לקוח / מפיק<input type="text" id="pj_client" value="${esc(p.client||'')}" placeholder="חברת הפקה / לקוח"></label>
+      <label class="fld" style="grid-column:1/-1">חוזה / תנאי ברירת מחדל<select id="pj_contract">${cOpts}</select></label>
+    </div>
+    <div class="fld" style="margin-top:12px">צבע בלוח השנה
+      <div class="swatches" id="pj_swatches" style="margin-top:6px">${PROJECT_COLORS.map(c=>
+        `<span class="swatch ${c===_projColor?'on':''}" style="background:${c}" data-c="${c}" onclick="pickProjColor('${c}')"></span>`).join('')}</div>
+    </div>
+    <label class="fld" style="margin-top:12px">הערות<textarea id="pj_notes" rows="2">${esc(p.notes||'')}</textarea></label>`;
+  openModal('projModal');
+}
+function pickProjColor(c){
+  _projColor=c;
+  document.querySelectorAll('#pj_swatches .swatch').forEach(s=>s.classList.toggle('on', s.dataset.c===c));
+}
+function saveProject(){
+  const name=document.getElementById('pj_name').value.trim();
+  if(!name){ alert('יש להזין שם פרויקט.'); return; }
+  const list=load(LS.projects,[]);
+  const d={ name, client:document.getElementById('pj_client').value.trim(),
+    contractId:document.getElementById('pj_contract').value||null,
+    color:_projColor, notes:document.getElementById('pj_notes').value };
+  let savedId;
+  if(_editingProjId){ const i=list.findIndex(x=>x.id===_editingProjId); if(i>=0){ d.id=_editingProjId; list[i]=Object.assign({},list[i],d); savedId=_editingProjId; } }
+  else { d.id=uid(); d.createdAt=Date.now(); list.push(d); savedId=d.id; }
+  save(LS.projects,list);
+  const back=_projReturnToWd;
+  closeProjModal();
+  if(back){ refreshWdProjectOptions(savedId); }
+  else { renderWorkdays(); }
+}
+function deleteProjectFromModal(){ if(_editingProjId) deleteProject(_editingProjId); }
+function deleteProject(id){
+  const used=load(LS.workdays,[]).filter(w=>w.projectId===id).length;
+  const msg=used? `לפרויקט מקושרים ${used} ימי עבודה. הם יישארו אך ינותקו מהפרויקט. למחוק?` : 'למחוק את הפרויקט?';
+  if(!confirm(msg)) return;
+  save(LS.projects, load(LS.projects,[]).filter(p=>p.id!==id));
+  // detach workdays
+  const wds=load(LS.workdays,[]); let changed=false;
+  for(const w of wds){ if(w.projectId===id){ w.projectId=null; changed=true; } }
+  if(changed) save(LS.workdays,wds);
+  closeProjModal();
+  renderWorkdays();
+}
+function closeProjModal(){ closeModal('projModal'); _editingProjId=null; _projReturnToWd=false; }
+/* rebuild the project <select> in the workday modal after creating one inline */
+function refreshWdProjectOptions(selectId){
+  const sel=document.getElementById('wd_project'); if(!sel) return;
+  const projects=load(LS.projects,[]);
+  sel.innerHTML='<option value="">— ללא פרויקט —</option>'+
+    projects.map(p=>`<option value="${p.id}">${esc(p.name||'פרויקט')}</option>`).join('')+
+    '<option value="__new">+ פרויקט חדש…</option>';
+  sel.value=selectId||''; onWdProjectChange();
+}
+
+/* ============================================================
+   CALENDAR — Google-style month grid. Days colored by project.
+   ============================================================ */
+let _calRef=new Date();
+function renderCalendar(){
+  const ref=new Date(_calRef.getFullYear(), _calRef.getMonth(), 1);
+  const monthNames=['ינואר','פברואר','מרץ','אפריל','מאי','יוני','יולי','אוגוסט','ספטמבר','אוקטובר','נובמבר','דצמבר'];
+  document.getElementById('calLabel').textContent=monthNames[ref.getMonth()]+' '+ref.getFullYear();
+
+  // map workdays by date
+  const byDate={};
+  for(const w of load(LS.workdays,[])){ if(!w.date) continue; (byDate[w.date]=byDate[w.date]||[]).push(w); }
+
+  const dow=['א׳','ב׳','ג׳','ד׳','ה׳','ו׳','ש׳'];
+  let html=dow.map(d=>`<div class="caldow">${d}</div>`).join('');
+
+  const start=new Date(ref); start.setDate(1-ref.getDay()); // back to Sunday
+  const todayStr=new Date().toISOString().slice(0,10);
+  for(let i=0;i<42;i++){
+    const d=new Date(start); d.setDate(start.getDate()+i);
+    const iso=d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
+    const other=d.getMonth()!==ref.getMonth();
+    const evs=(byDate[iso]||[]).slice().sort((a,b)=>(a.projectId||'').localeCompare(b.projectId||''));
+    let evHtml='';
+    const shown=evs.slice(0,3);
+    for(const w of shown){
+      const color=w.projectId?projColor(w.projectId):'#6b7280';
+      const p=computePay(w);
+      const label=esc(dayLabel(w)||w.role||'יום עבודה');
+      evHtml+=`<div class="cev ${w.tentative?'tent':''}" style="background:${color}" title="${label} · ${fmtMoney(Math.round(p.total))}" onclick="event.stopPropagation();openWorkday('${w.id}')">${label} <span class="cv">${Math.round(p.total/1000)}k</span></div>`;
+    }
+    if(evs.length>shown.length) evHtml+=`<div class="cev cmore">+${evs.length-shown.length} נוספים</div>`;
+    html+=`<div class="calcell ${other?'other':''} ${iso===todayStr?'today':''}" onclick="openWorkday(null,'${iso}')">
+      <div class="cnum">${d.getDate()}</div>${evHtml}</div>`;
+  }
+  document.getElementById('calGrid').innerHTML=html;
+
+  // legend: projects that appear this month
+  const projShown=new Set();
+  for(const w of load(LS.workdays,[])){ if((w.date||'').startsWith(ref.getFullYear()+'-'+String(ref.getMonth()+1).padStart(2,'0')) && w.projectId) projShown.add(w.projectId); }
+  const leg=[...projShown].map(id=>{ const p=projectById(id); return p?`<span><span class="cdot" style="background:${p.color||'#6b7280'}"></span>${esc(p.name)}</span>`:''; }).join('');
+  document.getElementById('calLegend').innerHTML = leg? leg+'<span><span class="cdot" style="background:#6b7280"></span>ללא פרויקט</span>' : '<span class="faint">לחץ על יום כדי להוסיף יום עבודה · לחץ על אירוע כדי לערוך</span>';
+}
+function calMove(dir){ _calRef=new Date(_calRef.getFullYear(), _calRef.getMonth()+dir, 1); renderCalendar(); }
+function calToday(){ _calRef=new Date(); renderCalendar(); }
+
+/* ---------- Dashboard ---------- */
+function renderDashboard(){
+  const contracts=load(LS.contracts,[]);
+  const workdays=load(LS.workdays,[]);
+  const s=settings();
+  const now=new Date(), ym=now.getFullYear()+'-'+String(now.getMonth()+1).padStart(2,'0');
+  const month=workdays.filter(w=>(w.date||'').startsWith(ym) && w.tentative!==true);
+
+  let monthExVat=0, owed=0;
+  for(const w of month){ monthExVat+=computePay(w).sub; }
+  for(const w of workdays){ if(w.tentative===true) continue; const st=w.status; if(st==='issued'||st==='overdue') owed+=computePay(w).total; }
+
+  // take-home: treat this month's ex-VAT income as profit proxy (expenses not yet wired)
+  const taxM=incomeTaxNetAnnual(monthExVat*12)/12;
+  const bit=bituachMonthly(monthExVat);
+  const take=Math.max(0, monthExVat-taxM-bit);
+
+  const cards=[
+    ['חוזים פעילים', contracts.length, contracts.length?'':'למד חוזה ראשון', 'gold'],
+    ['ימי עבודה החודש', month.length, '', ''],
+    ['הכנסה החודש (לפני מע"מ)', fmtMoney(Math.round(monthExVat)), 'הרווח החייב במס', ''],
+    ['כמה באמת שלך', fmtMoney(Math.round(take)), `אחרי מס מדורג + ביטוח לאומי · שיעורי ${s.taxYear}`, 'good'],
+    ['ממתין לתשלום', fmtMoney(Math.round(owed)), 'חשבוניות שהופקו וטרם שולמו', owed>0?'gold':''],
+  ];
+  document.getElementById('dashStats').innerHTML = cards.map(([k,v,sub,cls])=>
+    `<div class="stat"><div class="k">${k}</div><div class="v ${cls}">${v}</div>${sub?`<small>${sub}</small>`:''}</div>`
+  ).join('');
+}
+
+/* ---------- Modal helpers ---------- */
+function openModal(id){ document.getElementById(id).classList.add('open'); }
+function closeModal(id){ document.getElementById(id).classList.remove('open'); }
+
+/* ---------- Export / Import ---------- */
+function exportData(){
+  const dump={};
+  Object.values(LS).forEach(k=>dump[k]=load(k,null));
+  const blob=new Blob([JSON.stringify(dump,null,2)],{type:'application/json'});
+  const a=document.createElement('a'); a.href=URL.createObjectURL(blob);
+  a.download='cine-finance-backup-'+new Date().toISOString().slice(0,10)+'.json'; a.click();
+}
+function importData(file){
+  if(!file) return;
+  const r=new FileReader();
+  r.onload=()=>{ try{ const d=JSON.parse(r.result); applyData(d); alert('הנתונים יובאו בהצלחה.'); location.reload(); }catch(e){ alert('קובץ לא תקין.'); } };
+  r.readAsText(file);
+}
+
+/* ============================================================
+   DURABLE STORAGE — this is a tool meant to last years, so data
+   must survive a cleared browser, a new machine, a dead profile.
+   Three layers, strongest first:
+   1) Auto-save to a REAL file on disk (File System Access API).
+      Point it at a cloud-synced folder (OneDrive/Drive/Dropbox)
+      → offsite backup + the cloud's own version history, free.
+   2) Rotating in-browser snapshots in IndexedDB (last 30 days) —
+      a safety net even if no file is connected.
+   3) Manual JSON export/import (always available, any browser).
+   localStorage stays the fast working store; every save() mirrors
+   out to layers 1+2 (debounced).
+   ============================================================ */
+function dumpData(){ const d={_app:'cine-finance',_v:1,_savedAt:new Date().toISOString()}; Object.values(LS).forEach(k=>d[k]=load(k,null)); return d; }
+/* "empty" = no real business data yet (settings/apiKey alone don't count) */
+function isEmptyData(d){ d=d||{}; return ['cf_contracts','cf_projects','cf_workdays','cf_expenses'].every(k=>!Array.isArray(d[k])||d[k].length===0); }
+let _suppressBackup=false;
+function applyData(d){ _suppressBackup=true; try{ Object.values(LS).forEach(k=>{ if(d[k]!=null) localStorage.setItem(k, JSON.stringify(d[k])); }); } finally { _suppressBackup=false; } }
+
+/* --- tiny IndexedDB key/value store --- */
+const IDB_NAME='cine_finance', IDB_STORE='kv';
+function _idb(){ return new Promise((res,rej)=>{ const r=indexedDB.open(IDB_NAME,1); r.onupgradeneeded=()=>{ if(!r.result.objectStoreNames.contains(IDB_STORE)) r.result.createObjectStore(IDB_STORE); }; r.onsuccess=()=>res(r.result); r.onerror=()=>rej(r.error); }); }
+async function idbGet(k){ const db=await _idb(); return new Promise((res,rej)=>{ const q=db.transaction(IDB_STORE,'readonly').objectStore(IDB_STORE).get(k); q.onsuccess=()=>res(q.result); q.onerror=()=>rej(q.error); }); }
+async function idbSet(k,v){ const db=await _idb(); return new Promise((res,rej)=>{ const t=db.transaction(IDB_STORE,'readwrite'); t.objectStore(IDB_STORE).put(v,k); t.oncomplete=()=>res(); t.onerror=()=>rej(t.error); }); }
+
+/* --- layer 1: auto-save to a chosen file --- */
+let _fileHandle=null, _saveTimer=null, _backupState='off', _backupErr='';
+const fsaSupported = !!(window.showSaveFilePicker);
+function scheduleSave(){
+  if(_suppressBackup) return;
+  clearTimeout(_saveTimer);
+  _saveTimer=setTimeout(async()=>{ try{ await maybeSnapshot(); }catch(e){} if(_fileHandle) writeBackupFile(); }, 1200);
+}
+async function writeBackupFile(){
+  if(!_fileHandle) return;
+  try{
+    if((await _fileHandle.queryPermission({mode:'readwrite'}))!=='granted'){ setBackup('needgrant'); return; }
+    const w=await _fileHandle.createWritable();
+    await w.write(JSON.stringify(dumpData(),null,2)); await w.close();
+    localStorage.setItem('cf_lastBackup', new Date().toISOString());
+    setBackup('ok');
+  }catch(e){ setBackup('err', e.message); }
+}
+async function connectBackupFile(){
+  if(!fsaSupported){ alert('הדפדפן הזה לא תומך בשמירה אוטומטית לקובץ.\nפתח את האפליקציה דרך הקיצור (http://localhost) ב-Chrome או Edge, או הסתמך על ייצוא ידני.'); return; }
+  try{
+    const handle=await window.showSaveFilePicker({ suggestedName:'cine-finance-data.json',
+      types:[{description:'CINE FINANCE — נתונים',accept:{'application/json':['.json']}}] });
+    _fileHandle=handle; await idbSet('backupHandle', handle);
+    await writeBackupFile(); renderBackupUI();
+  }catch(e){ if(e.name!=='AbortError') alert('שגיאה בחיבור הקובץ: '+e.message); }
+}
+async function grantBackup(){
+  if(!_fileHandle) return;
+  try{ if((await _fileHandle.requestPermission({mode:'readwrite'}))==='granted'){ await writeBackupFile(); renderBackupUI(); } }
+  catch(e){ alert('לא ניתן לחדש הרשאה: '+e.message); }
+}
+async function disconnectBackup(){
+  if(!confirm('לנתק את הגיבוי האוטומטי לקובץ? (הקובץ עצמו לא יימחק)')) return;
+  _fileHandle=null; await idbSet('backupHandle', null); setBackup('off'); renderBackupUI();
+}
+async function restoreFromFile(){
+  let handle=_fileHandle, file;
+  try{
+    if(!handle){
+      if(!window.showOpenFilePicker){ document.getElementById('importFile').click(); return; }
+      [handle]=await window.showOpenFilePicker({types:[{description:'JSON',accept:{'application/json':['.json']}}]});
+    }
+    file=await handle.getFile();
+    const d=JSON.parse(await file.text());
+    if(d._app!=='cine-finance' && !d.cf_settings){ if(!confirm('הקובץ לא נראה כגיבוי של CINE FINANCE. לשחזר בכל זאת?')) return; }
+    if(!confirm('לשחזר את כל הנתונים מהקובץ? הנתונים הנוכחיים בדפדפן יוחלפו.')) return;
+    applyData(d); location.reload();
+  }catch(e){ if(e.name!=='AbortError') alert('שחזור נכשל: '+e.message); }
+}
+
+/* --- layer 2: rotating daily snapshots in IndexedDB --- */
+async function maybeSnapshot(){
+  const today=new Date().toISOString().slice(0,10);
+  let snaps=(await idbGet('snapshots'))||[];
+  const payload=JSON.stringify(dumpData());
+  if(snaps.length && snaps[snaps.length-1].day===today){ snaps[snaps.length-1]={day:today,at:Date.now(),data:payload}; }
+  else snaps.push({day:today,at:Date.now(),data:payload});
+  if(snaps.length>30) snaps=snaps.slice(snaps.length-30);
+  await idbSet('snapshots', snaps);
+}
+async function restoreSnapshot(day){
+  const snaps=(await idbGet('snapshots'))||[];
+  const s=snaps.find(x=>x.day===day); if(!s) return;
+  if(!confirm('לשחזר את הנתונים מהגיבוי של '+day+'? הנתונים הנוכחיים יוחלפו.')) return;
+  applyData(JSON.parse(s.data)); location.reload();
+}
+
+/* --- status + Settings UI --- */
+function setBackup(state, err){ _backupState=state; _backupErr=err||''; renderBackupPill(); const card=document.getElementById('backupCard'); if(card) renderBackupUI(); }
+function backupInfo(){
+  const map={
+    off:['',  'לא מחובר גיבוי אוטומטי', 'bad'],
+    ok:['ok', 'מגובה אוטומטית', 'ok'],
+    needgrant:['', 'נדרש אישור לחידוש הגיבוי', 'warn'],
+    err:['', 'שגיאת גיבוי', 'bad']
+  };
+  return map[_backupState]||map.off;
+}
+function timeAgo(iso){
+  if(!iso) return '';
+  const sec=Math.floor((Date.now()-new Date(iso))/1000);
+  if(sec<60) return 'הרגע'; if(sec<3600) return 'לפני '+Math.floor(sec/60)+' דק׳';
+  if(sec<86400) return 'לפני '+Math.floor(sec/3600)+' שע׳';
+  return 'לפני '+Math.floor(sec/86400)+' ימים';
+}
+function renderBackupPill(){
+  const el=document.getElementById('backupPill'); if(!el) return;
+  const [,, cls]=backupInfo();
+  const dot=el.querySelector('.dot'); dot.className='dot'+(cls==='ok'?' ok':'');
+  if(cls==='warn') dot.style.background='var(--warn)'; else dot.style.removeProperty('background');
+  el.querySelector('span:last-child').textContent = _backupState==='ok' ? ('מגובה · '+timeAgo(localStorage.getItem('cf_lastBackup'))) : backupInfo()[1];
+}
+async function renderBackupUI(){
+  const card=document.getElementById('backupCard'); if(!card) return;
+  const [,label,cls]=backupInfo();
+  const last=localStorage.getItem('cf_lastBackup');
+  let name=''; try{ name=_fileHandle?_fileHandle.name:''; }catch(e){}
+  let html='';
+  if(!fsaSupported){
+    html+=`<div class="notice" style="border-color:rgba(232,161,95,.3);background:rgba(232,161,95,.06)">הדפדפן הזה לא תומך בשמירה אוטומטית לקובץ. פתח את האפליקציה דרך הקיצור (http://localhost) ב-Chrome או Edge כדי להפעיל גיבוי אוטומטי. בינתיים השתמש בייצוא ידני למטה — ושמור עותק בתיקיית ענן.</div>`;
+  } else if(_backupState==='ok'){
+    html+=`<div class="row" style="gap:10px;margin-bottom:12px"><span class="st paid"><span class="d"></span>${label}</span>
+      <span class="muted" style="font-size:13px">קובץ: <b>${esc(name||'—')}</b> · עודכן ${timeAgo(last)}</span></div>
+      <div class="row"><button class="btn sm" onclick="restoreFromFile()">שחזר מהקובץ</button>
+      <button class="btn sm ghost" onclick="disconnectBackup()">נתק</button></div>`;
+  } else if(_backupState==='needgrant'){
+    html+=`<div class="row" style="gap:10px;margin-bottom:12px"><span class="st overdue"><span class="d"></span>${esc(label)}</span>
+      <span class="muted" style="font-size:13px">קובץ: <b>${esc(name||'—')}</b></span></div>
+      <button class="btn primary sm" onclick="grantBackup()">חדש הרשאה והמשך גיבוי</button>`;
+  } else {
+    html+=`<button class="btn primary sm" onclick="connectBackupFile()">חבר קובץ גיבוי אוטומטי</button>
+      <p class="muted" style="margin:10px 0 0;font-size:12.5px;line-height:1.6">בחר מיקום לקובץ <b>cine-finance-data.json</b>. <b style="color:var(--accent)">המלצה:</b> שמור אותו בתוך תיקיית OneDrive / Google Drive / Dropbox — כך כל שינוי מגובה אוטומטית גם מחוץ למחשב, עם היסטוריית גרסאות. מאותו רגע כל שינוי נשמר לקובץ אוטומטית.</p>`;
+  }
+  if(_backupState==='err') html+=`<div class="src" style="color:var(--bad);margin-top:8px">${esc(_backupErr)}</div>`;
+
+  // snapshot history
+  let snaps=[]; try{ snaps=(await idbGet('snapshots'))||[]; }catch(e){}
+  let snapHtml='';
+  if(snaps.length){
+    const items=snaps.slice().reverse().slice(0,8).map(s=>
+      `<div class="kv" style="display:flex;justify-content:space-between;padding:6px 0;border-top:1px solid var(--line);font-size:13px">
+        <span class="muted">${s.day} <span class="faint">· ${esc(JSON.parse(s.data).cf_workdays?JSON.parse(s.data).cf_workdays.length:0)} ימי עבודה</span></span>
+        <button class="btn sm ghost" style="padding:3px 10px" onclick="restoreSnapshot('${s.day}')">שחזר</button>
+      </div>`).join('');
+    snapHtml=`<div style="border-top:1px solid var(--line);margin-top:16px;padding-top:12px">
+      <h4 style="margin:0 0 4px;font-weight:500">גיבויים פנימיים אחרונים</h4>
+      <p class="faint" style="margin:0 0 6px;font-size:12px">תצלומי-מצב יומיים בתוך הדפדפן (עד 30 ימים). רשת ביטחון נוספת.</p>${items}</div>`;
+  }
+  card.innerHTML=`<h3 style="margin:0 0 4px;font-weight:500">גיבוי ושמירת נתונים</h3>
+    <p class="muted" style="margin:0 0 14px;font-size:13px;line-height:1.6">הכלי בנוי כדי ללוות אותך שנים — הנתונים שלך לא אמורים ללכת לאיבוד.</p>
+    ${html}${snapHtml}
+    <div style="border-top:1px solid var(--line);margin-top:16px;padding-top:12px">
+      <h4 style="margin:0 0 8px;font-weight:500">ייצוא / ייבוא ידני</h4>
+      <div class="row">
+        <button class="btn sm" onclick="exportData()">ייצוא קובץ JSON</button>
+        <button class="btn sm" onclick="document.getElementById('importFile').click()">ייבוא קובץ JSON</button>
+        <input type="file" id="importFile" accept="application/json" style="display:none" onchange="importData(this.files[0])">
+      </div>
+    </div>`;
+}
+async function initBackup(){
+  try{
+    const handle=await idbGet('backupHandle');
+    if(handle){ _fileHandle=handle; const perm=await handle.queryPermission({mode:'readwrite'}); setBackup(perm==='granted'?'ok':'needgrant'); }
+    else setBackup('off');
+  }catch(e){ setBackup('off'); }
+  renderBackupPill(); renderBackupUI();
+}
+
+/* ============================================================
+   CLOUD SYNC (Supabase) — automatic, multi-device.
+   The whole app state is one JSONB document per user in the
+   `app_data` table. Every local save() pushes (debounced 1s);
+   a realtime subscription pulls remote changes so an edit on
+   the phone lands on the PC within ~1s. The local file-backup
+   + IndexedDB snapshots stay on as extra safety nets — cloud is
+   the live sync, never the only copy. Publishable key is
+   browser-safe; data is protected per-user by RLS.
+   ============================================================ */
+const SUPABASE_URL='https://ouxpdalvdspmsjohgfxh.supabase.co';
+const SUPABASE_KEY='sb_publishable_-LgMqKLdoxabqIxK_yPwyA_LnMmr0p6';
+let _sb=null, _session=null, _syncState='off', _syncErr='', _lastSyncedJSON=null, _pushTimer=null, _rtChannel=null;
+
+async function initSync(){
+  if(!SUPABASE_URL || !SUPABASE_KEY || !window.supabase){ setSync('off'); return; }
+  try{
+    _sb=window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY, { auth:{ persistSession:true, autoRefreshToken:true } });
+    _sb.auth.onAuthStateChange((_e,s)=>{ _session=s||null; if(s){ onAuthed(); } else { teardownRealtime(); setSync('loggedout'); renderSyncUI(); } });
+    const { data:{ session } } = await _sb.auth.getSession();
+    _session=session||null;
+    if(session) await onAuthed(); else setSync('loggedout');
+  }catch(e){ setSync('err', e.message||String(e)); }
+  renderSyncPill(); renderSyncUI();
+}
+
+async function onAuthed(){
+  if(!_session) return;
+  setSync('connecting');
+  try{
+    const uid=_session.user.id;
+    const { data, error } = await _sb.from('app_data').select('data').eq('user_id',uid).maybeSingle();
+    if(error) throw error;
+    if(!data){                       // first device for this account → push local up (migration)
+      await pushNow(true);
+    } else {                          // cloud already has data
+      const cloud=data.data||{};
+      if(isEmptyData(cloud) && !isEmptyData(dumpData())){
+        // guard: never let an empty cloud row wipe a device that already has data
+        await pushNow(true);
+      } else {                        // cloud is the shared truth → adopt it
+        try{ await maybeSnapshot(); }catch(e){}   // snapshot local first (safety net)
+        const incoming=JSON.stringify(cloud);
+        if(incoming!==JSON.stringify(dumpData())){ applyData(cloud); refreshView(); }
+        _lastSyncedJSON=incoming;
+        setSync('synced');
+      }
+    }
+    setupRealtime(uid);
+  }catch(e){ setSync('err', e.message||String(e)); }
+  renderSyncPill(); renderSyncUI();
+}
+
+function setupRealtime(uid){
+  teardownRealtime();
+  _rtChannel=_sb.channel('app_data_'+uid)
+    .on('postgres_changes', { event:'*', schema:'public', table:'app_data', filter:'user_id=eq.'+uid }, payload=>{
+      const row=payload.new; if(!row || row.data==null) return;
+      const incoming=JSON.stringify(row.data);
+      if(incoming===_lastSyncedJSON) return;                 // echo of our own push
+      if(incoming===JSON.stringify(dumpData())){ _lastSyncedJSON=incoming; return; }
+      _lastSyncedJSON=incoming;
+      applyData(row.data); refreshView();
+      setSync('synced');
+    })
+    .subscribe();
+}
+function teardownRealtime(){ if(_rtChannel){ try{ _sb.removeChannel(_rtChannel); }catch(e){} _rtChannel=null; } }
+
+function scheduleCloudPush(){
+  if(!_session) return;
+  clearTimeout(_pushTimer);
+  _pushTimer=setTimeout(()=>pushNow(false), 1000);
+}
+async function pushNow(isMigration){
+  if(!_session) return;
+  try{
+    const dump=dumpData(); const json=JSON.stringify(dump);
+    if(!isMigration && json===_lastSyncedJSON) return;       // nothing actually changed
+    setSync('syncing');
+    const { error } = await _sb.from('app_data').upsert(
+      { user_id:_session.user.id, data:dump, updated_at:new Date().toISOString() }, { onConflict:'user_id' });
+    if(error) throw error;
+    _lastSyncedJSON=json; localStorage.setItem('cf_lastCloudPush', new Date().toISOString());
+    setSync('synced');
+  }catch(e){ setSync('err', e.message||String(e)); }
+}
+function refreshView(){ try{ go(_currentView||'dashboard'); }catch(e){} }
+
+/* auth actions — passwordless magic link */
+async function cloudSendLink(){
+  if(!_sb){ return; }
+  const email=document.getElementById('au_email').value.trim();
+  const msg=document.getElementById('au_msg'), btn=document.getElementById('au_send');
+  if(!email || !/.+@.+\..+/.test(email)){ msg.style.color='var(--bad)'; msg.textContent='הזן כתובת אימייל תקינה.'; return; }
+  localStorage.setItem('cf_lastEmail', email);
+  btn.disabled=true; msg.style.color='var(--muted)'; msg.textContent='שולח קישור…';
+  const redirect = location.origin + location.pathname;
+  const { error } = await _sb.auth.signInWithOtp({ email, options:{ emailRedirectTo: redirect } });
+  btn.disabled=false;
+  if(error){ msg.style.color='var(--bad)'; msg.textContent='שגיאה: '+error.message; }
+  else {
+    msg.style.color='var(--good)';
+    msg.innerHTML='✓ נשלח קישור כניסה אל <b>'+esc(email)+'</b>.<br>פתח את המייל (בדוק גם בספאם) ולחץ על הקישור — והאפליקציה תיכנס אוטומטית.';
+  }
+}
+async function cloudSignOut(){
+  if(!confirm('להתנתק מהסנכרון בענן? הנתונים יישארו במכשיר זה ובענן.')) return;
+  try{ await _sb.auth.signOut(); }catch(e){}
+  teardownRealtime(); _session=null; _lastSyncedJSON=null; setSync('loggedout'); renderSyncUI();
+}
+function openAuth(){
+  const e=document.getElementById('au_email'); if(e) e.value=localStorage.getItem('cf_lastEmail')||'';
+  document.getElementById('au_msg').textContent='';
+  openModal('authModal');
+}
+
+/* sync status + UI */
+function setSync(state, err){ _syncState=state; _syncErr=err||''; renderSyncPill(); }
+function syncInfo(){
+  const m={
+    off:['לא מוגדר סנכרון','bad'],
+    loggedout:['לא מחובר לענן','warn'],
+    connecting:['מתחבר…','warn'],
+    syncing:['מסנכרן…','warn'],
+    synced:['מסונכרן בענן','ok'],
+    err:['שגיאת סנכרון','bad']
+  };
+  return m[_syncState]||m.off;
+}
+function renderSyncPill(){
+  const el=document.getElementById('syncPill'); if(!el) return;
+  const [label,cls]=syncInfo();
+  const dot=el.querySelector('.dot'); dot.className='dot'+(cls==='ok'?' ok':'');
+  if(cls==='warn') dot.style.background='var(--warn)'; else dot.style.removeProperty('background');
+  el.querySelector('span:last-child').textContent=label;
+}
+function renderSyncUI(){
+  const card=document.getElementById('syncCard'); if(!card) return;
+  const [label,cls]=syncInfo();
+  const stCls=cls==='ok'?'paid':(cls==='warn'?'tentative':'overdue');
+  let body='';
+  if(_syncState==='synced' && _session){
+    body=`<div class="row" style="gap:10px;margin-bottom:12px">
+        <span class="st ${stCls}"><span class="d"></span>${label}</span>
+        <span class="muted" style="font-size:13px">מחובר כ-<b>${esc(_session.user.email||'')}</b></span></div>
+      <p class="muted" style="margin:0 0 12px;font-size:12.5px;line-height:1.6">כל שינוי נשמר אוטומטית לענן ומסתנכרן לכל המכשירים. פתח את אותה כתובת בטלפון, התחבר עם אותו אימייל — והכול שם.</p>
+      <button class="btn sm ghost" onclick="cloudSignOut()">התנתק</button>`;
+  } else if(_syncState==='loggedout' || _syncState==='off'){
+    body=`<button class="btn primary sm" onclick="openAuth()">התחבר / צור חשבון לסנכרון</button>
+      <p class="muted" style="margin:10px 0 0;font-size:12.5px;line-height:1.6">התחבר פעם אחת בכל מכשיר (אותו אימייל) — ומאז הנתונים מסתנכרנים אוטומטית בין המחשב לטלפון, בזמן אמת.</p>`;
+  } else if(_syncState==='err'){
+    body=`<div class="row" style="gap:10px;margin-bottom:10px"><span class="st overdue"><span class="d"></span>${label}</span></div>
+      <div class="src" style="color:var(--bad);margin-bottom:10px">${esc(_syncErr)}</div>
+      <button class="btn sm" onclick="initSync()">נסה שוב</button>
+      ${_session?'<button class="btn sm ghost" onclick="cloudSignOut()">התנתק</button>':'<button class="btn sm ghost" onclick="openAuth()">התחבר</button>'}`;
+  } else {
+    body=`<div class="row" style="gap:10px"><span class="st tentative"><span class="d"></span>${label}</span></div>`;
+  }
+  card.innerHTML=`<div class="row" style="justify-content:space-between">
+      <h3 style="margin:0;font-weight:500">סנכרון ענן · מחשב + טלפון</h3>
+      <span class="tag">Supabase</span></div>
+    <div style="margin-top:12px">${body}</div>`;
+}
+
+/* remember last email typed for convenience */
+document.addEventListener('input', e=>{ if(e.target && e.target.id==='au_email') localStorage.setItem('cf_lastEmail', e.target.value); });
+
+/* ---------- boot ---------- */
+refreshKeyPill();
+renderDashboard();
+initBackup();
+initSync();
+setInterval(renderBackupPill, 60000);
+</script>
+</body>
+</html>

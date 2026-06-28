@@ -1,0 +1,30 @@
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Editor
+.vscode/
+.idea/
+
+# Secrets — never commit API keys
+*.key
+.env
+.env.local
+secrets.json
+
+# Node (only used for local tooling/scripts, not the app itself)
+node_modules/
+
+# Local scratch
+/scratch/
+*.tmp
+
+# Business data — never commit (lives in localStorage / a cloud-synced backup file)
+cine-finance-data*.json
+cine-finance-backup-*.json
+*.lnk
+
+# Private project notes + local dev tooling — kept local, NOT published to the public repo
+CLAUDE.md
+.claude/
