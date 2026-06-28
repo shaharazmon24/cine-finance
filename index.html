@@ -402,13 +402,18 @@ table.data .gross{color:var(--accent);font-weight:500}
           </div>
 
           <div class="card">
-            <h3 style="margin:0 0 4px;font-weight:500">כללי שעות נוספות (ברירת מחדל)</h3>
-            <p class="muted" style="margin:0 0 14px;font-size:13px;line-height:1.6">ברירות מחדל לחישוב ש"נ מעבר ליום הבסיס. המספרים המדויקים של הסכם 2008 נמצאים בנספחים — כשתעביר לי אותם אעדכן. בינתיים ניתן לכוונן כאן.</p>
-            <div class="grid" style="grid-template-columns:1fr 1fr 1fr">
-              <label class="fld">שעות יום בסיס (חול)<input type="number" id="setBase" step="0.5"></label>
-              <label class="fld">2 ש"נ ראשונות ×<input type="number" id="setOt1" step="0.05"></label>
-              <label class="fld">ש"נ מעבר לכך ×<input type="number" id="setOt2" step="0.05"></label>
+            <div class="row" style="justify-content:space-between">
+              <h3 style="margin:0;font-weight:500">שעות עבודה ושעות נוספות</h3>
+              <span class="tag act">מדרגות אקט 2023</span>
             </div>
+            <p class="muted" style="margin:8px 0 14px;font-size:13px;line-height:1.6">לפי הסכם אקט–איגוד המפיקים 2023 (§5): אורך יום 10 ש' (מ-1.1.2025). ש"נ מחושבות במדרגות — עד 12 ש' ×1.5, שעה 12–13 ×2.0, ומעבר ל-13 +50% לכל שעה. כל יום עבודה יורש את אורך היום מהחוזה המקושר אם הוגדר. ניתן לכוונן כאן לכל מפיק.</p>
+            <div class="grid" style="grid-template-columns:1fr 1fr">
+              <label class="fld">אורך יום בסיס (ש')<input type="number" id="setBase" step="0.5"></label>
+              <label class="fld">ש"נ עד 12 ש' ×<input type="number" id="setOtTo12" step="0.05"></label>
+              <label class="fld">שעה 12–13 ×<input type="number" id="setOt12to13" step="0.05"></label>
+              <label class="fld">מעבר ל-13 ש' (+/שעה)<input type="number" id="setOtStep" step="0.05"></label>
+            </div>
+            <div class="notice" style="margin-top:12px;font-size:12px">שישי/ערב חג (×120% ליום), שבת/חג (×2), לילה (+20%), והסלמת ש"נ לפי מספר הפעמים בהפקה — תלויים בהפקה הספציפית; הוסף אותם ידנית ב"תוספת אחרת" של היום הרלוונטי.</div>
           </div>
 
           <div class="card" id="backupCard"></div>
@@ -516,8 +521,19 @@ const LS = {
   workdays:'cf_workdays', expenses:'cf_expenses', projects:'cf_projects'
 };
 const PROJECT_COLORS=['#5f9ce8','#5fc88f','#e0b15e','#c98fe8','#e8685f','#5fd0e8','#e88f5f','#9fe85f','#8f9ce8','#e85fb0'];
+// ACT 2023 §13.1 travel by "ring" zone — round-trip ₪ (editable conceptually; verified from the agreement)
+const ACT_TRAVEL_RINGS=[
+  ['','— ללא / ידני —',null],
+  ['free','אזור חופשי',0],['2','טבעת 2',50],['3','טבעת 3 (ירושלים)',150],
+  ['4','טבעת 4',200],['5','טבעת 5',400],['6','טבעת 6',600],['7','טבעת 7 (אילת)',1000]
+];
 const DEFAULT_SETTINGS = {
-  apiKey:'', currency:'₪', baseHours:11, ot1:1.25, ot2:1.5,
+  apiKey:'', currency:'₪',
+  // ---- ACT 2023 work-hours / overtime model (§5), editable in Settings ----
+  baseHours:10,        // אורך יום הפקה — 10h since 1.1.2025 (incl 45min lunch); single-day contracts may differ
+  otTo12:1.5,          // §5.8 — hours beyond the day up to 12h = 150%
+  ot12to13:2.0,        // §5.9 — hour 12→13 = 200% (first occurrence; escalates 250/300/350 per recurrence)
+  otBeyond13Step:0.5,  // §5.10 — beyond 13h, +50% per hour
   // ---- Israeli tax rates — official, effective 1.1.2026 (editable) ----
   vat:18,
   creditPoints:2.25, creditPointMonthly:242, taxYear:2026,
@@ -614,7 +630,8 @@ function fillSettings(){
   document.getElementById('setVat').value=s.vat;
   document.getElementById('setCredits').value=s.creditPoints;
   document.getElementById('setCur').value=s.currency;
-  document.getElementById('setBase').value=s.baseHours; document.getElementById('setOt1').value=s.ot1; document.getElementById('setOt2').value=s.ot2;
+  document.getElementById('setBase').value=s.baseHours;
+  document.getElementById('setOtTo12').value=s.otTo12; document.getElementById('setOt12to13').value=s.ot12to13; document.getElementById('setOtStep').value=s.otBeyond13Step;
   document.getElementById('taxYearTag').textContent='שיעורים רשמיים · '+s.taxYear;
   renderTaxTables();
   renderBackupUI();
@@ -625,7 +642,8 @@ function saveSettings(){
   s.vat=+document.getElementById('setVat').value;
   s.creditPoints=+document.getElementById('setCredits').value;
   s.currency=document.getElementById('setCur').value||'₪';
-  s.baseHours=+document.getElementById('setBase').value; s.ot1=+document.getElementById('setOt1').value; s.ot2=+document.getElementById('setOt2').value;
+  s.baseHours=+document.getElementById('setBase').value;
+  s.otTo12=+document.getElementById('setOtTo12').value; s.ot12to13=+document.getElementById('setOt12to13').value; s.otBeyond13Step=+document.getElementById('setOtStep').value;
   s.apiKey=document.getElementById('setApiKey').value.trim();
   save(LS.settings,s); refreshKeyPill(); renderTaxTables();
   const m=document.getElementById('keySaveMsg'); m.textContent='ההגדרות נשמרו ✓'; setTimeout(()=>m.textContent='',2000);
@@ -1022,17 +1040,25 @@ function computePay(wd){
   const c=resolveContract(wd);
   const rate = wd.dayRate!=null?+wd.dayRate : (c&&c.dayRate!=null?+c.dayRate:0);
   const plusVat = wd.plusVat!=null?!!wd.plusVat : (c?!!c.plusVat:true);
-  const baseHours = (c&&c.baseDayHours)? +c.baseDayHours : +s.baseHours||11;
+  const baseHours = (c&&c.baseDayHours)? +c.baseDayHours : +s.baseHours||10;
   const hourly = baseHours>0?rate/baseHours:0;
   const worked = +wd.hoursWorked||0;
-  let otHours = Math.max(0, worked-baseHours);
-  const ot1h=Math.min(otHours,2), ot2h=Math.max(0,otHours-2);
-  const otPay = ot1h*hourly*(+s.ot1||1.25) + ot2h*hourly*(+s.ot2||1.5);
+  const otHours = Math.max(0, worked-baseHours);
+  // ACT 2023 §5 overtime bands (weekday, first-occurrence): base→12h ×1.5, 12→13h ×2.0,
+  // beyond 13h +0.5/hr. Integrated in quarter-hour steps (§5.8). Friday/Shabbat/night and the
+  // per-recurrence escalation are project-specific → adjust via the day's fields if needed.
+  const otTo12=+s.otTo12||1.5, ot12to13=+s.ot12to13||2.0, otStep=+s.otBeyond13Step||0.5;
+  let otPay=0;
+  for(let t=baseHours; t<worked-1e-9; t+=0.25){
+    const seg=Math.min(0.25, worked-t);
+    const m = t<12?otTo12 : (t<13?ot12to13 : ot12to13 + otStep*(Math.floor(t-13)+1));
+    otPay += seg*hourly*m;
+  }
   const gear=+wd.gearRental||0, travel=+wd.travel||0, other=+wd.otherAdd||0;
   const sub = rate + otPay + gear + travel + other;
   const vat = plusVat? sub*((+s.vat||0)/100) : 0;
   return {
-    rate, plusVat, baseHours, hourly, worked, otHours, ot1h, ot2h,
+    rate, plusVat, baseHours, hourly, worked, otHours,
     otPay, gear, travel, other, sub, vat, total:sub+vat,
     contractName: c?c.name:null
   };
@@ -1186,6 +1212,7 @@ function openWorkday(id, presetDate, presetProjectId){
       <label class="fld">שעת סיום<input type="time" id="wd_end" value="${esc(w.endTime||'')}" oninput="onWdTimeChange()"></label>
       <label class="fld">סה"כ שעות<input type="number" id="wd_hours" step="0.25" value="${w.hoursWorked!=null?esc(w.hoursWorked):''}" oninput="renderWdPreview()" placeholder="אוטומטי מהשעות"></label>
       <label class="fld">השכרת ציוד ₪<input type="number" id="wd_gear" value="${w.gearRental!=null?esc(w.gearRental):''}" oninput="renderWdPreview()"></label>
+      <label class="fld">טבעת נסיעה (אקט)<select id="wd_ring" onchange="onWdRingChange()">${ACT_TRAVEL_RINGS.map(([k,l,amt])=>`<option value="${k}" ${ (w.ring||'')===k?'selected':''}>${l}${amt!=null&&amt>0?' · '+amt+' ₪':''}</option>`).join('')}</select></label>
       <label class="fld">נסיעות ₪<input type="number" id="wd_travel" value="${w.travel!=null?esc(w.travel):''}" oninput="renderWdPreview()"></label>
       <label class="fld">תוספת אחרת ₪<input type="number" id="wd_other" value="${w.otherAdd!=null?esc(w.otherAdd):''}" oninput="renderWdPreview()"></label>
       <label class="fld">סטטוס תשלום<select id="wd_status">${stOpts}</select></label>
@@ -1239,6 +1266,12 @@ function onWdTimeChange(){
   if(h!=null) document.getElementById('wd_hours').value=h;
   renderWdPreview();
 }
+function onWdRingChange(){
+  const k=document.getElementById('wd_ring').value;
+  const row=ACT_TRAVEL_RINGS.find(r=>r[0]===k);
+  if(row && row[2]!=null) document.getElementById('wd_travel').value=row[2];
+  renderWdPreview();
+}
 function readWdForm(){
   const v=id=>document.getElementById(id).value;
   const num=id=>{ const x=v(id); return x===''?null:Number(x); };
@@ -1247,7 +1280,7 @@ function readWdForm(){
     date:v('wd_date'), projectId:(projVal&&projVal!=='__new')?projVal:null, contractId:v('wd_contract')||null,
     client:v('wd_client'), role:v('wd_role'),
     dayRate:num('wd_rate'), startTime:v('wd_start')||null, endTime:v('wd_end')||null, hoursWorked:num('wd_hours'),
-    gearRental:num('wd_gear'), travel:num('wd_travel'), otherAdd:num('wd_other'),
+    gearRental:num('wd_gear'), ring:v('wd_ring')||null, travel:num('wd_travel'), otherAdd:num('wd_other'),
     plusVat:document.getElementById('wd_plusvat').checked,
     tentative:document.getElementById('wd_tentative').checked,
     status:v('wd_status'), notes:v('wd_notes')
@@ -1257,7 +1290,7 @@ function renderWdPreview(){
   const p=computePay(readWdForm());
   const f=n=>Math.round(n).toLocaleString('he-IL')+' ₪';
   let lines=`<div class="ln"><span>תעריף יום הבסיס</span><span class="num">${f(p.rate)}</span></div>`;
-  if(p.otPay>0) lines+=`<div class="ln"><span>שעות נוספות (${(+p.otHours).toFixed(1).replace(/\.0$/,'')} ש' · ${p.ot1h>0?'×'+settings().ot1:''}${p.ot2h>0?' / ×'+settings().ot2:''})</span><span class="num">${f(p.otPay)}</span></div>`;
+  if(p.otPay>0) lines+=`<div class="ln"><span>שעות נוספות (${(+p.otHours).toFixed(2).replace(/\.?0+$/,'')} ש' · מדרגות אקט)</span><span class="num">${f(p.otPay)}</span></div>`;
   if(p.gear>0) lines+=`<div class="ln"><span>השכרת ציוד</span><span class="num">${f(p.gear)}</span></div>`;
   if(p.travel>0) lines+=`<div class="ln"><span>נסיעות</span><span class="num">${f(p.travel)}</span></div>`;
   if(p.other>0) lines+=`<div class="ln"><span>תוספת אחרת</span><span class="num">${f(p.other)}</span></div>`;
