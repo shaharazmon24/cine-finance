@@ -20,6 +20,8 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/mammoth/1.6.0/mammoth.browser.min.js"></script>
 <!-- Supabase JS — automatic multi-device cloud sync -->
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<!-- pdf-lib — write/stamp signed PDFs (digital signing) -->
+<script src="https://cdn.jsdelivr.net/npm/pdf-lib@1.17.1/dist/pdf-lib.min.js"></script>
 <style>
 :root{
   --bg:#0c0e13; --bg2:#0f1219; --panel:#161a22; --panel2:#1b2029; --line:#252b36; --line2:#323a47;
@@ -246,6 +248,25 @@ table.data .gross{color:var(--accent);font-weight:500}
 .swatch:hover{transform:scale(1.1)}
 .swatch.on{border-color:var(--text);box-shadow:0 0 0 2px var(--bg)}
 
+/* ---------- Contract signing ---------- */
+.sign-toolbar{position:sticky;top:0;z-index:20;display:flex;flex-wrap:wrap;align-items:center;gap:8px;background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:10px 12px;margin-bottom:16px}
+.sign-toolbar .sep{width:1px;align-self:stretch;background:var(--line2);margin:0 4px}
+.tool{background:var(--panel2);border:1px solid var(--line2);color:var(--text);border-radius:9px;padding:8px 12px;font-size:13.5px;display:inline-flex;align-items:center;gap:6px}
+.tool:hover{border-color:var(--accent-dim)}
+.tool.armed{background:var(--accent);color:#1a1205;border-color:var(--accent);font-weight:600}
+.sign-pages{display:flex;flex-direction:column;align-items:center;gap:18px;padding-bottom:30px}
+.sign-page{position:relative;box-shadow:0 6px 30px rgba(0,0,0,.5);line-height:0;cursor:crosshair}
+.sign-page canvas{display:block;border-radius:2px}
+.sign-page.placing{outline:2px dashed var(--accent)}
+.sfield{position:absolute;cursor:move;border:1px dashed transparent;border-radius:3px;line-height:1.1;white-space:nowrap;padding:1px 2px;user-select:none}
+.sfield:hover{border-color:var(--accent);background:rgba(224,177,94,.08)}
+.sfield img{display:block;height:100%;width:auto;pointer-events:none}
+.sfield .sx{position:absolute;top:-10px;inset-inline-end:-10px;width:18px;height:18px;border-radius:50%;background:var(--bad);color:#fff;border:0;font-size:12px;display:none;align-items:center;justify-content:center;line-height:1}
+.sfield:hover .sx{display:flex}
+.sigpad-wrap{background:#fff;border-radius:10px;border:1px solid var(--line2);touch-action:none}
+.sigpad-wrap canvas{display:block;width:100%;border-radius:10px;cursor:crosshair}
+.sign-side{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:16px}
+
 /* ---------- Mobile / phone layout ---------- */
 @media (max-width:760px){
   html,body{overflow:auto}
@@ -299,6 +320,7 @@ table.data .gross{color:var(--accent);font-weight:500}
     <nav class="nav" id="nav">
       <button data-view="dashboard" class="active"><span class="ic">◧</span>דשבורד</button>
       <button data-view="contracts"><span class="ic">❒</span>חוזים</button>
+      <button data-view="sign"><span class="ic">✍</span>חתימה</button>
       <button data-view="workdays"><span class="ic">☰</span>ימי עבודה</button>
       <button data-view="calendar"><span class="ic">▦</span>לוח שנה</button>
       <button data-view="expenses"><span class="ic">↧</span>הוצאות</button>
@@ -336,6 +358,11 @@ table.data .gross{color:var(--accent);font-weight:500}
       <!-- CONTRACTS -->
       <section class="view" id="view-contracts">
         <div id="contractsList"></div>
+      </section>
+
+      <!-- SIGN (digital contract signing) -->
+      <section class="view" id="view-sign">
+        <div id="signRoot"></div>
       </section>
 
       <!-- WORKDAYS -->
@@ -508,8 +535,39 @@ table.data .gross{color:var(--accent);font-weight:500}
   </div>
 </div>
 
+<!-- Signature pad modal -->
+<div class="modal-bg" id="sigModal" style="z-index:65">
+  <div class="modal" style="width:min(560px,100%)">
+    <div class="modal-head">
+      <h2 id="sigTitle">חתימה</h2>
+      <button class="x" onclick="closeModal('sigModal')">×</button>
+    </div>
+    <div class="modal-body">
+      <div class="viewtog" style="margin-bottom:12px">
+        <button id="sigTabDraw" class="on" onclick="sigTab('draw')">צייר</button>
+        <button id="sigTabType" onclick="sigTab('type')">הקלד</button>
+      </div>
+      <div id="sigDraw">
+        <div class="sigpad-wrap"><canvas id="sigCanvas" height="200"></canvas></div>
+        <div class="row" style="margin-top:10px;justify-content:space-between">
+          <button class="btn sm ghost" onclick="sigClear()">נקה</button>
+          <span class="faint" style="font-size:12px">צייר את החתימה עם העכבר או האצבע</span>
+        </div>
+      </div>
+      <div id="sigType" style="display:none">
+        <input type="text" id="sigTypeText" placeholder="הקלד שם לחתימה" style="width:100%;font-family:'Bebas Neue',cursive;font-size:34px;padding:14px;background:#fff;color:#111;border:1px solid var(--line2);border-radius:10px;text-align:center" oninput="sigTypePreview()">
+      </div>
+    </div>
+    <div class="modal-foot">
+      <button class="btn primary" onclick="sigSave()">שמור חתימה</button>
+      <button class="btn ghost" onclick="closeModal('sigModal')">ביטול</button>
+    </div>
+  </div>
+</div>
+
 <input type="file" id="contractFile" accept="application/pdf,image/*,.docx" style="display:none">
 <input type="file" id="scheduleFile" accept="application/pdf,image/*" style="display:none">
+<input type="file" id="signFile" accept="application/pdf" style="display:none">
 
 <script>
 /* ============================================================
@@ -520,7 +578,7 @@ const MODEL = 'claude-sonnet-4-5';
 const API_URL = 'https://api.anthropic.com/v1/messages';
 const LS = {
   settings:'cf_settings', contracts:'cf_contracts',
-  workdays:'cf_workdays', expenses:'cf_expenses', projects:'cf_projects'
+  workdays:'cf_workdays', expenses:'cf_expenses', projects:'cf_projects', signer:'cf_signer'
 };
 const PROJECT_COLORS=['#5f9ce8','#5fc88f','#e0b15e','#c98fe8','#e8685f','#5fd0e8','#e88f5f','#9fe85f','#8f9ce8','#e85fb0'];
 // ACT 2023 §13.1 travel by "ring" zone — round-trip ₪ (editable conceptually; verified from the agreement)
@@ -584,7 +642,7 @@ function esc(s){ return String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;'
 function fmtMoney(n){ const s=settings(); return (Number(n)||0).toLocaleString('he-IL')+' '+s.currency; }
 
 /* ---------- navigation ---------- */
-const TITLES={dashboard:'דשבורד',contracts:'חוזים',workdays:'ימי עבודה',calendar:'לוח שנה',expenses:'הוצאות',settings:'הגדרות'};
+const TITLES={dashboard:'דשבורד',contracts:'חוזים',sign:'חתימה על חוזים',workdays:'ימי עבודה',calendar:'לוח שנה',expenses:'הוצאות',settings:'הגדרות'};
 let _currentView='dashboard';
 function go(v){
   _currentView=v;
@@ -597,6 +655,7 @@ function go(v){
   if(v==='contracts') renderContracts();
   if(v==='workdays') renderWorkdays();
   if(v==='calendar') renderCalendar();
+  if(v==='sign') renderSigner();
   if(v==='settings') fillSettings();
 }
 document.getElementById('nav').addEventListener('click',e=>{ const b=e.target.closest('button'); if(b) go(b.dataset.view); });
@@ -2025,6 +2084,232 @@ function renderSyncUI(){
 
 /* remember last email typed for convenience */
 document.addEventListener('input', e=>{ if(e.target && e.target.id==='au_email') localStorage.setItem('cf_lastEmail', e.target.value); });
+
+/* ============================================================
+   CONTRACT SIGNING — upload a PDF, place signature/initials/text/date
+   fields by clicking, drag to position, export a signed PDF.
+   pdf.js renders the pages for display; pdf-lib writes the output.
+   Every placed field is a transparent-PNG image overlay (so Hebrew
+   text works without embedding a Unicode font).
+   ============================================================ */
+let _signDoc=null;     // { name, bytes:Uint8Array, pages:[{scale,nw,nh}] }
+let _signTool=null;    // 'signature'|'initials'|'text'|'date'
+let _signFields=[];    // {id,page,x,y,type,img,hPx}
+let _sigTarget='sig', _sigMode='draw', _sigCtx=null, _sigDrawing=false, _sigHasInk=false;
+
+function signDetails(){ return load(LS.signer, {}); }
+function toolLabel(t){ return ({signature:'חתימה',initials:'ראשי תיבות',text:'טקסט',date:'תאריך'})[t]||''; }
+
+function renderSigner(){
+  const root=document.getElementById('signRoot'); if(!root) return;
+  if(!_signDoc){
+    const d=signDetails();
+    root.innerHTML=`
+      <div class="grid" style="grid-template-columns:1.4fr 1fr;gap:16px;align-items:start">
+        <div class="dropzone" id="signDz" onclick="document.getElementById('signFile').click()">
+          <div class="ic">✍</div><h3>חתום על חוזה</h3>
+          <p class="muted" style="margin:0">גרור לכאן קובץ PDF או לחץ לבחירה.<br>מקם חתימה, ראשי תיבות, פרטים ותאריך — וייצא PDF חתום. מחליף Adobe Sign.</p>
+        </div>
+        <div class="sign-side">
+          <h3 style="margin:0 0 4px;font-weight:500">הפרטים שלי</h3>
+          <p class="faint" style="margin:0 0 12px;font-size:12px">נשמרים ומסתנכרנים. ימולאו בלחיצה אחת על המסמך.</p>
+          <div class="grid" style="grid-template-columns:1fr 1fr;gap:10px">
+            <label class="fld">שם פרטי<input id="sg_first" value="${esc(d.first||'')}"></label>
+            <label class="fld">שם משפחה<input id="sg_last" value="${esc(d.last||'')}"></label>
+            <label class="fld">ת.ז<input id="sg_id" value="${esc(d.idnum||'')}"></label>
+            <label class="fld">מייל<input id="sg_email" value="${esc(d.email||'')}"></label>
+            <label class="fld" style="grid-column:1/-1">כתובת<input id="sg_addr" value="${esc(d.addr||'')}"></label>
+          </div>
+          <button class="btn sm" style="margin-top:10px" onclick="saveSignerDetails()">שמור פרטים</button>
+          <span id="sg_msg" class="faint" style="font-size:12px;margin-inline-start:8px"></span>
+          <div style="border-top:1px solid var(--line);margin-top:14px;padding-top:12px">
+            <div class="row" style="justify-content:space-between"><span class="muted" style="font-size:13px">חתימה</span>
+              <button class="btn sm ghost" onclick="openSigPad('sig')">${d.sig?'שנה':'צור'}</button></div>
+            ${d.sig?`<img src="${d.sig}" style="height:42px;background:#fff;border-radius:6px;margin-top:8px;padding:4px">`:''}
+            <div class="row" style="justify-content:space-between;margin-top:12px"><span class="muted" style="font-size:13px">ראשי תיבות</span>
+              <button class="btn sm ghost" onclick="openSigPad('initials')">${d.initials?'שנה':'צור'}</button></div>
+            ${d.initials?`<img src="${d.initials}" style="height:34px;background:#fff;border-radius:6px;margin-top:8px;padding:4px">`:''}
+          </div>
+        </div>
+      </div>`;
+    const dz=document.getElementById('signDz');
+    if(dz){ ['dragover','dragenter'].forEach(ev=>dz.addEventListener(ev,e=>{e.preventDefault();dz.classList.add('over');}));
+      ['dragleave','drop'].forEach(ev=>dz.addEventListener(ev,e=>{e.preventDefault();dz.classList.remove('over');}));
+      dz.addEventListener('drop',e=>{ const f=e.dataTransfer.files[0]; if(f) signLoadFile(f); }); }
+    return;
+  }
+  root.innerHTML=`
+    <div class="sign-toolbar">
+      <span class="muted" style="font-size:13px;max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(_signDoc.name)}</span>
+      <span class="sep"></span>
+      <button class="tool" id="tool-signature" onclick="armTool('signature')">✍ חתימה</button>
+      <button class="tool" id="tool-initials" onclick="armTool('initials')">א.ב ראשי תיבות</button>
+      <button class="tool" id="tool-text" onclick="armTool('text')">📝 טקסט/פרטים</button>
+      <button class="tool" id="tool-date" onclick="armTool('date')">📅 תאריך</button>
+      <span class="sep"></span>
+      <span class="faint" id="signHint" style="font-size:12px">בחר כלי ולחץ על המסמך כדי למקם</span>
+      <div class="spacer" style="flex:1"></div>
+      <button class="btn sm ghost" onclick="signClose()">סגור מסמך</button>
+      <button class="btn primary sm" onclick="exportSignedPDF()">⬇ ייצא PDF חתום</button>
+    </div>
+    <div class="sign-pages" id="signPages"></div>`;
+  signRenderPages();
+}
+function saveSignerDetails(){
+  const v=id=>document.getElementById(id).value.trim();
+  const d=Object.assign(signDetails(), {first:v('sg_first'),last:v('sg_last'),idnum:v('sg_id'),email:v('sg_email'),addr:v('sg_addr')});
+  save(LS.signer,d);
+  const m=document.getElementById('sg_msg'); if(m){ m.textContent='נשמר ✓'; setTimeout(()=>m.textContent='',1500); }
+}
+function signClose(){ _signDoc=null; _signFields=[]; _signTool=null; renderSigner(); }
+async function signLoadFile(file){
+  if(!file || !/pdf$/i.test(file.name)){ alert('בחר קובץ PDF.'); return; }
+  const buf=await file.arrayBuffer();
+  _signDoc={ name:file.name, bytes:new Uint8Array(buf), pages:[] };
+  _signFields=[]; _signTool=null;
+  renderSigner();
+}
+async function signRenderPages(){
+  const host=document.getElementById('signPages'); if(!host) return;
+  host.innerHTML='<div class="statusline"><span class="spin"></span> טוען את המסמך…</div>';
+  try{
+    pdfjsLib.GlobalWorkerOptions.workerSrc='https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+    const pdf=await pdfjsLib.getDocument({data:_signDoc.bytes.slice()}).promise;
+    host.innerHTML='';
+    const targetW=Math.min(760,(host.clientWidth||760));
+    _signDoc.pages=[];
+    for(let i=1;i<=pdf.numPages;i++){
+      const page=await pdf.getPage(i);
+      const base=page.getViewport({scale:1});
+      const scale=targetW/base.width;
+      const vp=page.getViewport({scale});
+      const pageDiv=document.createElement('div'); pageDiv.className='sign-page'; pageDiv.dataset.page=i-1;
+      pageDiv.style.width=vp.width+'px'; pageDiv.style.height=vp.height+'px';
+      const canvas=document.createElement('canvas'); canvas.width=vp.width; canvas.height=vp.height;
+      pageDiv.appendChild(canvas);
+      pageDiv.addEventListener('click', e=>onSignPageClick(e,i-1,pageDiv));
+      host.appendChild(pageDiv);
+      await page.render({canvasContext:canvas.getContext('2d'), viewport:vp}).promise;
+      _signDoc.pages[i-1]={scale, nw:base.width, nh:base.height};
+    }
+    renderSignFields();
+  }catch(e){ host.innerHTML=`<div class="statusline err">⚠ שגיאה בטעינת ה-PDF: ${esc(e.message||e)}</div>`; }
+}
+function armTool(t){
+  _signTool = _signTool===t? null : t;
+  document.querySelectorAll('.sign-toolbar .tool').forEach(b=>b.classList.toggle('armed', b.id==='tool-'+_signTool));
+  document.querySelectorAll('.sign-page').forEach(p=>p.classList.toggle('placing', !!_signTool));
+  const hint=document.getElementById('signHint'); if(hint) hint.textContent=_signTool?('לחץ על המסמך כדי למקם '+toolLabel(_signTool)):'בחר כלי ולחץ על המסמך כדי למקם';
+  if(_signTool==='signature' && !signDetails().sig) openSigPad('sig');
+  if(_signTool==='initials' && !signDetails().initials) openSigPad('initials');
+}
+function onSignPageClick(e,pageIdx,pageDiv){
+  if(!_signTool) return; if(e.target.closest('.sfield')) return;
+  const r=pageDiv.getBoundingClientRect();
+  addSignField(pageIdx, _signTool, e.clientX-r.left, e.clientY-r.top);
+}
+function textImage(text,fontPx){
+  const m=document.createElement('canvas').getContext('2d');
+  const font=fontPx+'px Heebo, Arial, sans-serif'; m.font=font;
+  const w=Math.ceil(m.measureText(text).width)+8, h=Math.ceil(fontPx*1.5);
+  const c=document.createElement('canvas'); c.width=w*2; c.height=h*2;
+  const x=c.getContext('2d'); x.scale(2,2); x.font=font; x.fillStyle='#10243f'; x.textBaseline='middle'; x.direction='rtl'; x.textAlign='right';
+  x.fillText(text, w-4, h/2);
+  return {url:c.toDataURL('image/png'), h};
+}
+function addSignField(pageIdx,type,x,y){
+  const d=signDetails(); const f={ id:uid(), page:pageIdx, x, y, type };
+  if(type==='signature'){ if(!d.sig){ openSigPad('sig'); return; } f.img=d.sig; f.hPx=42; }
+  else if(type==='initials'){ if(!d.initials){ openSigPad('initials'); return; } f.img=d.initials; f.hPx=26; }
+  else {
+    let txt;
+    if(type==='date') txt=new Date().toLocaleDateString('he-IL');
+    else { const full=((d.first||'')+' '+(d.last||'')).trim(); txt=prompt('טקסט להוספה (שם / ת.ז / כתובת / מייל / חופשי):', full); if(txt==null) return; }
+    if(!txt) return; const im=textImage(txt,15); f.img=im.url; f.hPx=im.h;
+  }
+  _signFields.push(f); renderSignFields();
+}
+function renderSignFields(){
+  document.querySelectorAll('.sign-page .sfield').forEach(el=>el.remove());
+  for(const f of _signFields){
+    const pageDiv=document.querySelector('.sign-page[data-page="'+f.page+'"]'); if(!pageDiv) continue;
+    const el=document.createElement('div'); el.className='sfield'; el.dataset.id=f.id;
+    el.style.left=f.x+'px'; el.style.top=f.y+'px'; el.style.height=f.hPx+'px';
+    el.innerHTML=`<img src="${f.img}" style="height:${f.hPx}px">`;
+    const xb=document.createElement('button'); xb.className='sx'; xb.textContent='×';
+    xb.onclick=ev=>{ ev.stopPropagation(); _signFields=_signFields.filter(z=>z.id!==f.id); renderSignFields(); };
+    el.appendChild(xb);
+    enableDragField(el,f,pageDiv);
+    pageDiv.appendChild(el);
+  }
+}
+function enableDragField(el,f,pageDiv){
+  let sx,sy,ox,oy,drag=false;
+  const move=e=>{ if(!drag) return; const p=e.touches?e.touches[0]:e; const pr=pageDiv.getBoundingClientRect();
+    f.x=Math.max(0,Math.min(pr.width-6, ox+(p.clientX-sx))); f.y=Math.max(0,Math.min(pr.height-6, oy+(p.clientY-sy)));
+    el.style.left=f.x+'px'; el.style.top=f.y+'px'; e.preventDefault(); };
+  const up=()=>{ drag=false; document.removeEventListener('mousemove',move); document.removeEventListener('mouseup',up); document.removeEventListener('touchmove',move); document.removeEventListener('touchend',up); };
+  const down=e=>{ if(e.target.classList.contains('sx')) return; drag=true; const p=e.touches?e.touches[0]:e; sx=p.clientX; sy=p.clientY; ox=f.x; oy=f.y; e.preventDefault(); e.stopPropagation();
+    document.addEventListener('mousemove',move); document.addEventListener('mouseup',up); document.addEventListener('touchmove',move,{passive:false}); document.addEventListener('touchend',up); };
+  el.addEventListener('mousedown',down); el.addEventListener('touchstart',down,{passive:false});
+}
+/* signature pad */
+function openSigPad(target){ _sigTarget=target; document.getElementById('sigTitle').textContent=target==='initials'?'ראשי תיבות':'חתימה'; sigTab('draw'); openModal('sigModal'); setTimeout(initSigPad,40); }
+function initSigPad(){
+  const c=document.getElementById('sigCanvas'); if(!c) return;
+  c.width=c.offsetWidth||500; c.height=200;
+  _sigCtx=c.getContext('2d'); _sigCtx.lineWidth=2.6; _sigCtx.lineCap='round'; _sigCtx.lineJoin='round'; _sigCtx.strokeStyle='#10243f'; _sigHasInk=false;
+  const pos=e=>{ const r=c.getBoundingClientRect(); const p=e.touches?e.touches[0]:e; return [p.clientX-r.left,p.clientY-r.top]; };
+  const start=e=>{ _sigDrawing=true; const [x,y]=pos(e); _sigCtx.beginPath(); _sigCtx.moveTo(x,y); e.preventDefault(); };
+  const draw=e=>{ if(!_sigDrawing) return; const [x,y]=pos(e); _sigCtx.lineTo(x,y); _sigCtx.stroke(); _sigHasInk=true; e.preventDefault(); };
+  const end=()=>{ _sigDrawing=false; };
+  c.onmousedown=start; c.onmousemove=draw; c.ontouchstart=start; c.ontouchmove=draw; c.ontouchend=end;
+  window.addEventListener('mouseup',end);
+}
+function sigTab(m){ _sigMode=m; const dr=document.getElementById('sigTabDraw'),ty=document.getElementById('sigTabType');
+  if(dr) dr.classList.toggle('on',m==='draw'); if(ty) ty.classList.toggle('on',m==='type');
+  const dd=document.getElementById('sigDraw'),td=document.getElementById('sigType'); if(dd) dd.style.display=m==='draw'?'block':'none'; if(td) td.style.display=m==='type'?'block':'none';
+  if(m==='draw') setTimeout(initSigPad,20); }
+function sigClear(){ if(_sigCtx) _sigCtx.clearRect(0,0,_sigCtx.canvas.width,_sigCtx.canvas.height); _sigHasInk=false; }
+function sigTypePreview(){}
+function trimCanvas(canvas){
+  const ctx=canvas.getContext('2d'),w=canvas.width,h=canvas.height,data=ctx.getImageData(0,0,w,h).data;
+  let minx=w,miny=h,maxx=0,maxy=0,found=false;
+  for(let y=0;y<h;y++)for(let x=0;x<w;x++){ if(data[(y*w+x)*4+3]>10){ found=true; minx=Math.min(minx,x);maxx=Math.max(maxx,x);miny=Math.min(miny,y);maxy=Math.max(maxy,y);} }
+  if(!found) return canvas.toDataURL('image/png');
+  const pad=8; minx=Math.max(0,minx-pad);miny=Math.max(0,miny-pad);maxx=Math.min(w,maxx+pad);maxy=Math.min(h,maxy+pad);
+  const tw=maxx-minx,th=maxy-miny,out=document.createElement('canvas'); out.width=tw; out.height=th;
+  out.getContext('2d').drawImage(canvas,minx,miny,tw,th,0,0,tw,th); return out.toDataURL('image/png');
+}
+function sigSave(){
+  let url;
+  if(_sigMode==='draw'){ if(!_sigHasInk){ alert('צייר חתימה קודם.'); return; } url=trimCanvas(document.getElementById('sigCanvas')); }
+  else { const t=document.getElementById('sigTypeText').value.trim(); if(!t){ alert('הקלד טקסט.'); return; } url=textImage(t,40).url; }
+  const d=signDetails(); d[_sigTarget==='initials'?'initials':'sig']=url; save(LS.signer,d);
+  closeModal('sigModal'); renderSigner();
+}
+async function exportSignedPDF(){
+  if(!_signDoc) return;
+  if(!window.PDFLib){ alert('ספריית ה-PDF לא נטענה. רענן ונסה שוב.'); return; }
+  if(!_signFields.length){ alert('לא הוספת שדות/חתימה למסמך.'); return; }
+  try{
+    const { PDFDocument } = PDFLib;
+    const pdfDoc=await PDFDocument.load(_signDoc.bytes);
+    const pages=pdfDoc.getPages();
+    for(const f of _signFields){
+      const page=pages[f.page], meta=_signDoc.pages[f.page]; if(!page||!meta) continue;
+      const S=meta.scale, ph=meta.nh;
+      const png=await pdfDoc.embedPng(f.img);
+      const dispH=f.hPx, dispW=dispH*(png.width/png.height);
+      const w=dispW/S, hh=dispH/S, xx=f.x/S, yy=ph-(f.y/S)-hh;
+      page.drawImage(png,{x:xx,y:yy,width:w,height:hh});
+    }
+    const bytes=await pdfDoc.save();
+    const a=document.createElement('a'); a.href=URL.createObjectURL(new Blob([bytes],{type:'application/pdf'}));
+    a.download=_signDoc.name.replace(/\.pdf$/i,'')+' — חתום.pdf'; a.click();
+  }catch(e){ alert('שגיאה בייצוא ה-PDF: '+(e.message||e)); }
+}
+document.getElementById('signFile').addEventListener('change', e=>{ const f=e.target.files[0]; if(f) signLoadFile(f); e.target.value=''; });
 
 /* ---------- boot ---------- */
 normalizeAllDates();   // fix any legacy/imported non-canonical dates so sort + calendar are correct
