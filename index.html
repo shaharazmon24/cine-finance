@@ -859,62 +859,90 @@ async function scheduleFromFile(file){
   }
 }
 function openSchedReview(items){
-  _schedItems=items;
-  const projects=load(LS.projects,[]);
+  _schedItems=items.map(it=>Object.assign({_keep:true}, it));
+  _schedProj=''; _schedContract=''; _schedRole=''; _schedTentative=true;
+  renderSchedReview();
+  openModal('schedModal');
+}
+function renderSchedReview(){
+  const projects=load(LS.projects,[]), contracts=load(LS.contracts,[]);
   const pOpts='<option value="">— ללא פרויקט —</option>'+
-    projects.map(p=>`<option value="${p.id}">${esc(p.name||'פרויקט')}</option>`).join('')+
+    projects.map(p=>`<option value="${p.id}" ${_schedProj===p.id?'selected':''}>${esc(p.name||'פרויקט')}</option>`).join('')+
     '<option value="__new">+ פרויקט חדש…</option>';
+  const cOpts='<option value="">— ללא חוזה —</option>'+
+    contracts.map(c=>`<option value="${c.id}" ${_schedContract===c.id?'selected':''}>${esc(c.name||'חוזה')}${c.project?' · '+esc(c.project):''}</option>`).join('');
+  // quick-fill suggestions for the production field
+  const prodSet=new Set([...projects.map(p=>p.name), ..._schedItems.map(i=>i.production)].filter(Boolean));
+  const dlist='<datalist id="sch_prodlist">'+[...prodSet].map(p=>`<option value="${esc(p)}"></option>`).join('')+'</datalist>';
+  const live=_schedItems.filter(it=>it._keep);
   let rows='';
-  items.forEach((it,i)=>{
-    rows+=`<tr>
-      <td><input type="checkbox" class="sch-on" data-i="${i}" checked style="width:auto"></td>
+  _schedItems.forEach((it,i)=>{
+    if(!it._keep) return;
+    rows+=`<tr id="schrow-${i}">
+      <td><input type="checkbox" class="sch-on" data-i="${i}" ${it._on!==false?'checked':''} style="width:auto"></td>
       <td><input type="date" class="sch-f" data-i="${i}" data-k="date" value="${esc(it.date||'')}" style="width:150px"></td>
-      <td><input type="text" class="sch-f" data-i="${i}" data-k="production" value="${esc(it.production||'')}" placeholder="הפקה"></td>
+      <td><input type="text" class="sch-f sch-prod" list="sch_prodlist" data-i="${i}" data-k="production" value="${esc(it.production||'')}" placeholder="הפקה" onchange="schedFillProduction(${i})"></td>
       <td><input type="time" class="sch-f" data-i="${i}" data-k="callTime" value="${esc(it.callTime||'')}" style="width:110px"></td>
       <td><input type="text" class="sch-f" data-i="${i}" data-k="location" value="${esc(it.location||'')}" placeholder="מיקום"></td>
+      <td><button class="rowdel" title="הסר יום מהייבוא" onclick="schedRemoveRow(${i})">🗑</button></td>
     </tr>`;
   });
   document.getElementById('schedBody').innerHTML=`
-    <div class="notice" style="margin-bottom:14px">נמצאו <b>${items.length}</b> ימי צילום. בדוק, סמן אילו להוסיף, וערוך לפי הצורך. שום דבר לא נכתב ללוח עד שתאשר.</div>
-    <div class="grid" style="grid-template-columns:1fr 1fr; margin-bottom:14px">
+    <div class="notice" style="margin-bottom:14px">${live.length} ימי צילום בייבוא. סמן אילו להוסיף, ערוך, או הסר ימים מיותרים (🗑). שום דבר לא נכתב ללוח עד שתאשר.</div>
+    <div class="grid" style="grid-template-columns:1fr 1fr; margin-bottom:10px">
       <label class="fld">שייך לפרויקט<select id="sch_project" onchange="onSchedProjChange()">${pOpts}</select></label>
-      <label class="fld">תפקיד (לכל הימים)<input type="text" id="sch_role" placeholder="צלם / מפעיל..."></label>
+      <label class="fld">שייך לחוזה<select id="sch_contract" onchange="_schedContract=this.value">${cOpts}</select></label>
+      <label class="fld">תפקיד (לכל הימים)<input type="text" id="sch_role" value="${esc(_schedRole)}" oninput="_schedRole=this.value" placeholder="צלם / מפעיל..."></label>
+      <label class="fld">הפקה (לכל הימים)<input type="text" id="sch_prodAll" list="sch_prodlist" placeholder="ימולא בכל השורות" onchange="schedApplyProductionAll(this.value)"></label>
     </div>
-    <label class="fld" style="margin-bottom:12px"><span class="row" style="gap:8px"><input type="checkbox" id="sch_tentative" checked style="width:auto"> סמן כימים <b>משוערים</b> (טנטטיביים — עד לאישור סופי)</span></label>
-    <div class="tbl-wrap"><table class="data"><thead><tr><th></th><th>תאריך</th><th>הפקה</th><th>שעת קריאה</th><th>מיקום</th></tr></thead><tbody>${rows}</tbody></table></div>`;
-  openModal('schedModal');
+    <label class="fld" style="margin-bottom:12px"><span class="row" style="gap:8px"><input type="checkbox" id="sch_tentative" ${_schedTentative?'checked':''} style="width:auto" onchange="_schedTentative=this.checked"> סמן כימים <b>משוערים</b> (טנטטיביים — עד לאישור סופי)</span></label>
+    <div class="tbl-wrap"><table class="data"><thead><tr>
+      <th><input type="checkbox" id="sch_all" ${live.every(it=>it._on!==false)?'checked':''} style="width:auto" onchange="schedToggleAll(this.checked)" title="בחר/נקה הכל"></th>
+      <th>תאריך</th><th>הפקה</th><th>שעת קריאה</th><th>מיקום</th><th></th>
+    </tr></thead><tbody>${rows}</tbody></table></div>${dlist}`;
+}
+let _schedProj='', _schedContract='', _schedRole='', _schedTentative=true;
+function schedReadDom(){ // mirror current input values into _schedItems
+  document.querySelectorAll('#schedBody .sch-f').forEach(el=>{ _schedItems[+el.dataset.i][el.dataset.k]=el.value; });
+  document.querySelectorAll('#schedBody .sch-on').forEach(c=>{ _schedItems[+c.dataset.i]._on=c.checked; });
 }
 function onSchedProjChange(){
   const sel=document.getElementById('sch_project');
-  if(sel.value==='__new'){ sel.value=''; openProject(null, false); }
+  if(sel.value==='__new'){ sel.value=_schedProj; schedReadDom(); openProject(null, false); return; }
+  schedReadDom();
+  _schedProj=sel.value;
+  const p=_schedProj?projectById(_schedProj):null;
+  if(p){ if(p.contractId) _schedContract=p.contractId;     // inherit the project's contract
+         if(p.name) _schedItems.forEach(it=>{ if(it._keep && !it.production) it.production=p.name; }); }
+  renderSchedReview();
 }
+function schedToggleAll(on){ schedReadDom(); _schedItems.forEach(it=>{ if(it._keep) it._on=on; }); renderSchedReview(); }
+function schedFillProduction(i){ // typing a production in one row fills the empty ones
+  schedReadDom();
+  const val=_schedItems[i].production;
+  if(val) _schedItems.forEach(it=>{ if(it._keep && !it.production) it.production=val; });
+  renderSchedReview();
+}
+function schedApplyProductionAll(val){ schedReadDom(); if(val) _schedItems.forEach(it=>{ if(it._keep) it.production=val; }); renderSchedReview(); }
+function schedRemoveRow(i){ schedReadDom(); _schedItems[i]._keep=false; renderSchedReview(); }
 function confirmSchedule(){
-  const projectId=document.getElementById('sch_project').value||null;
-  const role=document.getElementById('sch_role').value.trim();
-  const tentative=document.getElementById('sch_tentative').checked;
-  // read edited values back
-  document.querySelectorAll('#schedBody .sch-f').forEach(el=>{
-    const i=+el.dataset.i; _schedItems[i][el.dataset.k]=el.value;
-  });
-  const chosen=[...document.querySelectorAll('#schedBody .sch-on')].filter(c=>c.checked).map(c=>+c.dataset.i);
+  schedReadDom();
+  const projectId=_schedProj||null, contractId=_schedContract||null, role=(_schedRole||'').trim(), tentative=_schedTentative;
+  const chosen=_schedItems.filter(it=>it._keep && it._on!==false && it.date);
   if(!chosen.length){ alert('לא נבחרו ימים.'); return; }
   const list=load(LS.workdays,[]);
-  let added=0;
-  for(const i of chosen){
-    const it=_schedItems[i];
-    if(!it.date) continue;
+  for(const it of chosen){
     const note=[it.location?('מיקום: '+it.location):'', it.notes||''].filter(Boolean).join(' · ');
     list.push({
-      id:uid(), date:it.date, projectId,
+      id:uid(), date:it.date, projectId, contractId,
       client:(projectId?'':(it.production||'')), role:role||it.role||'',
       startTime:it.callTime||null, status:'unissued', tentative, notes:note, createdAt:Date.now()
     });
-    added++;
   }
   save(LS.workdays,list);
-  closeModal('schedModal'); _schedItems=[];
+  closeModal('schedModal'); _schedItems=[]; _schedProj=''; _schedContract=''; _schedRole='';
   refreshView();
-  alert(`נוספו ${added} ימי צילום ללוח${tentative?' (כמשוערים)':''}.`);
+  alert(`נוספו ${chosen.length} ימי צילום ללוח${tentative?' (כמשוערים)':''}.`);
 }
 
 /* ---------- Review modal ---------- */
