@@ -2176,8 +2176,10 @@ async function signRenderPages(){
     pdfjsLib.GlobalWorkerOptions.workerSrc='https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
     const pdf=await pdfjsLib.getDocument({
       data:_signDoc.bytes.slice(),
-      // Hebrew/CID fonts (common in Word-exported PDFs) need the character maps + standard fonts,
-      // otherwise glyphs render scrambled on the canvas.
+      // Hebrew rendering: disableFontFace makes pdf.js rasterize the glyph OUTLINES directly
+      // (instead of building a browser @font-face that mangles RTL) — fixes scrambled Hebrew.
+      // cMaps + standard fonts handle non-embedded / CID fonts.
+      disableFontFace:true,
       cMapUrl:'https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/cmaps/',
       cMapPacked:true,
       standardFontDataUrl:'https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/standard_fonts/'
