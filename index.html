@@ -355,6 +355,7 @@ table.data .gross{color:var(--accent);font-weight:500}
           <h2 id="calLabel"></h2>
           <button class="btn sm ghost" onclick="calToday()">היום</button>
           <div class="spacer" style="flex:1"></div>
+          <button class="btn sm" onclick="openProject()" title="צור פרויקט רב-ימים (טווח תאריכים)">+ פרויקט</button>
           <button class="btn sm" onclick="pickScheduleFile()" title="העלה קולשיט/צילום מסך לשיבוץ אוטומטי">✦ שבץ מקובץ</button>
           <button class="btn primary sm" onclick="openWorkday()">+ יום עבודה</button>
         </div>
@@ -607,6 +608,8 @@ function renderTopActions(v){
     b.onclick=pickContractFile; el.appendChild(b);
   }
   if(v==='workdays'){
+    const pr=document.createElement('button'); pr.className='btn'; pr.textContent='+ פרויקט';
+    pr.title='צור פרויקט רב-ימים (טווח תאריכים / מספר ימים)'; pr.onclick=()=>openProject(); el.appendChild(pr);
     const s=document.createElement('button'); s.className='btn'; s.textContent='✦ שבץ מקובץ';
     s.title='העלה קולשיט/צילום מסך לשיבוץ אוטומטי'; s.onclick=pickScheduleFile; el.appendChild(s);
     const b=document.createElement('button'); b.className='btn primary'; b.textContent='+ יום עבודה';
@@ -1116,7 +1119,7 @@ function renderWorkdays(){
   if(!list.length){
     host.innerHTML=`<div class="empty"><div class="big">☰</div>
       <div>אין עדיין ימי עבודה.</div>
-      <div style="margin-top:14px"><button class="btn primary" onclick="openWorkday()">+ הוסף יום עבודה ראשון</button></div>
+      <div class="row" style="margin-top:14px;justify-content:center;gap:10px"><button class="btn primary" onclick="openWorkday()">+ יום עבודה</button><button class="btn" onclick="openProject()">+ פרויקט רב-ימים</button></div>
       ${contracts.length?'':'<div class="muted" style="margin-top:12px;font-size:13px">טיפ: למד חוזה קודם — כך יום העבודה יחשב את שכרו אוטומטית.</div>'}
     </div>`;
     return;
