@@ -83,11 +83,14 @@ main{flex:1; display:flex; flex-direction:column; min-width:0}
   padding:10px 16px; font-size:14px; transition:.15s; display:inline-flex; align-items:center; gap:8px;
 }
 .btn:hover{border-color:var(--accent-dim)}
-.btn.primary{background:var(--accent); color:#1a1205; border-color:var(--accent); font-weight:700}
+.btn:active{transform:translateY(1px)}
+.btn.primary{background:var(--accent); color:#1a1205; border-color:var(--accent); font-weight:700; box-shadow:0 2px 14px rgba(224,177,94,.16)}
 .btn.primary:hover{background:#e9bd70}
 .btn.ghost{background:transparent}
 .btn.sm{padding:7px 12px; font-size:13px}
 .btn:disabled{opacity:.5; cursor:not-allowed}
+/* respect users who prefer less motion */
+@media (prefers-reduced-motion: reduce){ *,*::before,*::after{animation-duration:.001ms!important;animation-iteration-count:1!important;transition-duration:.001ms!important}}
 .card{background:var(--panel); border:1px solid var(--line); border-radius:var(--r); padding:18px}
 .muted{color:var(--muted)}
 .faint{color:var(--faint)}
@@ -136,13 +139,30 @@ label.fld input:focus,label.fld select:focus,label.fld textarea:focus{outline:no
 .statusline.err{color:var(--bad)}
 
 /* ---------- Stat cards / dashboard ---------- */
-.stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:14px}
-.stat{background:var(--panel);border:1px solid var(--line);border-radius:var(--r);padding:16px 18px}
-.stat .k{color:var(--muted);font-size:13px;margin-bottom:8px}
-.stat .v{font-size:26px;font-weight:700;font-variant-numeric:tabular-nums}
+.stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:14px}
+.stat{background:var(--panel);border:1px solid var(--line);border-radius:var(--r);padding:17px 18px;transition:border-color .15s, transform .15s}
+.stat:hover{border-color:var(--line2);transform:translateY(-2px)}
+.stat .k{color:var(--muted);font-size:12.5px;margin-bottom:9px;letter-spacing:.2px}
+.stat .v{font-size:25px;font-weight:700;font-variant-numeric:tabular-nums;line-height:1.1}
 .stat .v.gold{color:var(--accent)}
 .stat .v.good{color:var(--good)}
-.stat small{color:var(--faint);font-size:12px;font-weight:400}
+.stat small{color:var(--faint);font-size:12px;font-weight:400;display:block;margin-top:6px;line-height:1.45}
+/* dashboard hero — the "how much is actually mine" panel */
+.dash-hero{display:grid;grid-template-columns:1.05fr 1fr;background:
+  radial-gradient(120% 140% at 100% 0%, rgba(224,177,94,.10), transparent 55%), linear-gradient(140deg,var(--panel2),var(--panel));
+  border:1px solid var(--line2);border-radius:18px;overflow:hidden;margin-bottom:18px;box-shadow:0 8px 34px rgba(0,0,0,.34)}
+.dash-hero-main{padding:28px 30px;display:flex;flex-direction:column;justify-content:center;gap:7px;border-inline-end:1px solid var(--line)}
+.dash-hero-main .k{color:var(--muted);font-size:14px}
+.dash-hero-main .big-num{font-size:46px;font-weight:800;color:var(--accent);font-variant-numeric:tabular-nums;line-height:1.02;letter-spacing:-.6px}
+.dash-hero-main .sub{color:var(--faint);font-size:12.5px;line-height:1.5;max-width:34ch}
+.dash-hero-break{padding:24px 26px;display:flex;flex-direction:column;gap:10px;justify-content:center}
+.dash-hero-break .brk{display:flex;justify-content:space-between;gap:14px;font-size:13.5px;color:var(--muted)}
+.dash-hero-break .brk .num{font-variant-numeric:tabular-nums;color:var(--text)}
+.dash-hero-break .brk.minus{color:var(--faint)}
+.dash-hero-break .brk.total{border-top:1px solid var(--line2);padding-top:11px;margin-top:4px;color:var(--text);font-weight:600;font-size:14.5px}
+.dash-hero-break .brk.total .num{color:var(--good)}
+.dash-sec{color:var(--faint);font-size:12px;letter-spacing:.4px;text-transform:none;margin:22px 2px 10px;font-weight:500}
+.dash-quick{display:flex;flex-wrap:wrap;gap:10px;margin-top:18px}
 
 /* contract list */
 .clist{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:14px}
@@ -153,8 +173,9 @@ label.fld input:focus,label.fld select:focus,label.fld textarea:focus{outline:no
 .ccard .kv{display:flex;justify-content:space-between;font-size:13px;padding:4px 0;border-top:1px solid var(--line)}
 .ccard .kv span:first-child{color:var(--faint)}
 .ccard .actions{display:flex;gap:8px;margin-top:12px}
-.ccard .del{position:absolute;top:12px;inset-inline-start:12px;background:transparent;border:0;color:var(--faint);font-size:16px}
-.ccard .del:hover{color:var(--bad)}
+.ccard .del{position:absolute;top:10px;inset-inline-end:10px;background:transparent;border:0;color:var(--faint);font-size:15px;width:28px;height:28px;border-radius:8px;display:flex;align-items:center;justify-content:center;transition:.12s;z-index:2}
+.ccard .del:hover{color:var(--bad);background:rgba(232,104,95,.12)}
+.ccard h3{padding-inline-end:30px}
 .confbadge{font-size:11px;padding:2px 8px;border-radius:999px}
 .confbadge.high{background:rgba(95,200,143,.15);color:var(--good)}
 .confbadge.med{background:rgba(232,161,95,.15);color:var(--warn)}
@@ -309,6 +330,14 @@ table.data .gross{color:var(--accent);font-weight:500}
   .viewtog{margin-inline-start:0}
   .summ{min-width:calc(50% - 5px); flex:1}
   .stat .v{font-size:22px}
+  /* dashboard hero stacks on phone */
+  .dash-hero{grid-template-columns:1fr}
+  .dash-hero-main{padding:22px 20px;border-inline-end:0;border-bottom:1px solid var(--line)}
+  .dash-hero-main .big-num{font-size:38px}
+  .dash-hero-break{padding:18px 20px}
+  .stats{grid-template-columns:1fr 1fr;gap:10px}
+  .stat{padding:14px 15px}
+  .dash-quick .btn{flex:1 1 calc(50% - 5px);justify-content:center}
 }
 </style>
 </head>
@@ -343,16 +372,7 @@ table.data .gross{color:var(--accent);font-weight:500}
 
       <!-- DASHBOARD -->
       <section class="view active" id="view-dashboard">
-        <div class="stats" id="dashStats"></div>
-        <div style="height:18px"></div>
-        <div class="card">
-          <h3 style="margin:0 0 4px;font-weight:500">ברוך הבא 🎬</h3>
-          <p class="muted" style="margin:0 0 14px;line-height:1.7">זה מרכז הניהול של העסק שלך. התחל בהגדרת מפתח ה‑API, ואז למד חוזה ראשון — ומשם כל יום עבודה יחשב את עצמו אוטומטית.</p>
-          <div class="row">
-            <button class="btn primary" onclick="go('contracts')">למד חוזה חדש</button>
-            <button class="btn ghost" onclick="go('settings')">הגדרות ומפתח API</button>
-          </div>
-        </div>
+        <div id="dashRoot"></div>
       </section>
 
       <!-- CONTRACTS -->
@@ -1696,31 +1716,73 @@ function calToday(){ _calRef=new Date(); renderCalendar(); }
 
 /* ---------- Dashboard ---------- */
 function renderDashboard(){
+  const root=document.getElementById('dashRoot'); if(!root) return;
   const contracts=load(LS.contracts,[]);
   const workdays=load(LS.workdays,[]);
+  const projects=load(LS.projects,[]);
   const s=settings();
   const now=new Date(), ym=now.getFullYear()+'-'+String(now.getMonth()+1).padStart(2,'0');
-  const month=workdays.filter(w=>(w.date||'').startsWith(ym) && w.tentative!==true);
+  const todayStr=now.toISOString().slice(0,10);
+  const monthNames=['ינואר','פברואר','מרץ','אפריל','מאי','יוני','יולי','אוגוסט','ספטמבר','אוקטובר','נובמבר','דצמבר'];
 
+  const month=workdays.filter(w=>(w.date||'').startsWith(ym) && w.tentative!==true);
   let monthExVat=0, owed=0;
   for(const w of month){ monthExVat+=computePay(w).sub; }
   for(const w of workdays){ if(w.tentative===true) continue; const st=w.status; if(st==='issued'||st==='overdue') owed+=computePay(w).total; }
-
-  // take-home: treat this month's ex-VAT income as profit proxy (expenses not yet wired)
-  const taxM=incomeTaxNetAnnual(monthExVat*12)/12;
-  const bit=bituachMonthly(monthExVat);
+  const upcoming=workdays.filter(w=>normDate(w.date)>=todayStr).length;
+  const taxM=incomeTaxNetAnnual(monthExVat*12)/12, bit=bituachMonthly(monthExVat);
   const take=Math.max(0, monthExVat-taxM-bit);
+  const f=n=>fmtMoney(Math.round(n));
 
-  const cards=[
-    ['חוזים פעילים', contracts.length, contracts.length?'':'למד חוזה ראשון', 'gold'],
-    ['ימי עבודה החודש', month.length, '', ''],
-    ['הכנסה החודש (לפני מע"מ)', fmtMoney(Math.round(monthExVat)), 'הרווח החייב במס', ''],
-    ['כמה באמת שלך', fmtMoney(Math.round(take)), `אחרי מס מדורג + ביטוח לאומי · שיעורי ${s.taxYear}`, 'good'],
-    ['ממתין לתשלום', fmtMoney(Math.round(owed)), 'חשבוניות שהופקו וטרם שולמו', owed>0?'gold':''],
+  // genuinely-empty state → slim onboarding (only before any real data exists)
+  if(!contracts.length && !workdays.length){
+    root.innerHTML=`<div class="dash-hero" style="grid-template-columns:1fr">
+      <div class="dash-hero-main" style="border-inline-end:0;gap:10px">
+        <div class="brand" style="font-size:24px;padding:0">CINE <span class="a">FINANCE</span></div>
+        <div class="k" style="font-size:15px;color:var(--text)">מרכז הניהול של העסק שלך — הכול במקום אחד.</div>
+        <div class="sub" style="max-width:52ch">התחל בהגדרת מפתח ה‑API, ואז למד חוזה ראשון. משם כל יום עבודה יחשב את שכרו לבד, ותראה כמה כסף באמת שלך.</div>
+        <div class="dash-quick" style="margin-top:14px">
+          <button class="btn primary" onclick="go('contracts')">למד חוזה ראשון</button>
+          <button class="btn" onclick="go('settings')">הגדרות ומפתח API</button>
+        </div>
+      </div></div>`;
+    return;
+  }
+
+  const heroBreak = monthExVat>0 ? `
+      <div class="dash-hero-break">
+        <div class="brk"><span>הכנסה החודש (לפני מע"מ)</span><span class="num">${f(monthExVat)}</span></div>
+        <div class="brk minus"><span>− מס הכנסה (הפרשה)</span><span class="num">${f(taxM)}</span></div>
+        <div class="brk minus"><span>− ביטוח לאומי + בריאות</span><span class="num">${f(bit)}</span></div>
+        <div class="brk total"><span>נשאר לך</span><span class="num">${f(take)}</span></div>
+      </div>`
+    : `<div class="dash-hero-break"><div class="muted" style="font-size:13px;line-height:1.7">עדיין אין הכנסה החודש. הוסף יום עבודה והמספרים יתחילו לזוז.</div></div>`;
+
+  const tiles=[
+    ['ימי עבודה החודש', month.length, ''],
+    ['ממתין לתשלום', f(owed), 'הופק וטרם שולם', owed>0?'gold':''],
+    ['ימים מתוכננים', upcoming, 'מהיום והלאה'],
+    ['חוזים · פרויקטים', contracts.length+' · '+projects.length, ''],
   ];
-  document.getElementById('dashStats').innerHTML = cards.map(([k,v,sub,cls])=>
-    `<div class="stat"><div class="k">${k}</div><div class="v ${cls}">${v}</div>${sub?`<small>${sub}</small>`:''}</div>`
-  ).join('');
+
+  root.innerHTML=`
+    <div class="dash-hero">
+      <div class="dash-hero-main">
+        <div class="k">כמה באמת שלך · ${monthNames[now.getMonth()]}</div>
+        <div class="big-num">${f(take)}</div>
+        <div class="sub">אחרי מס הכנסה מדורג + ביטוח לאומי · שיעורי ${s.taxYear}. מע"מ נגבה בנפרד ומועבר למדינה — אינו שלך.</div>
+      </div>
+      ${heroBreak}
+    </div>
+    <div class="dash-sec">החודש במבט מהיר</div>
+    <div class="stats">${tiles.map(([k,v,sub,cls])=>
+      `<div class="stat"><div class="k">${k}</div><div class="v ${cls||''}">${v}</div>${sub?`<small>${sub}</small>`:''}</div>`).join('')}</div>
+    <div class="dash-quick">
+      <button class="btn primary" onclick="openWorkday()">+ יום עבודה</button>
+      <button class="btn" onclick="go('calendar')">לוח שנה</button>
+      <button class="btn" onclick="pickScheduleFile()">✦ שבץ מקובץ</button>
+      <button class="btn" onclick="go('sign')">✍ חתום על חוזה</button>
+    </div>`;
 }
 
 /* ---------- Modal helpers ---------- */
