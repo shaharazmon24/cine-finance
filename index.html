@@ -199,6 +199,7 @@ table.data .gross{color:var(--accent);font-weight:500}
 .chip{background:var(--panel);border:1px solid var(--line2);color:var(--muted);border-radius:999px;padding:6px 14px;font-size:13px;transition:.12s}
 .chip:hover{border-color:var(--accent-dim)}
 .chip.on{background:var(--accent);color:#1a1205;border-color:var(--accent);font-weight:600}
+.selbar{display:flex;align-items:center;gap:12px;background:var(--panel2);border:1px solid var(--line2);border-radius:11px;padding:9px 14px;margin-bottom:12px;font-size:14px}
 .viewtog{display:inline-flex;background:var(--panel);border:1px solid var(--line2);border-radius:999px;padding:3px;margin-inline-start:auto}
 .viewtog button{background:transparent;border:0;color:var(--muted);border-radius:999px;padding:5px 14px;font-size:13px}
 .viewtog button.on{background:var(--panel2);color:var(--text)}
@@ -851,6 +852,8 @@ async function scheduleFromFile(file){
     const arr=parseJSONArray(text);
     if(!arr) throw new Error('לא הצלחתי לפענח את התשובה כ-JSON.');
     if(!arr.length){ host.innerHTML=prev; alert('לא נמצאו ימי צילום בקובץ.'); return; }
+    arr.forEach(it=>{ it.date=normDate(it.date); });   // canonicalize dates so they sort + place correctly
+    arr.sort((a,b)=>(a.date||'').localeCompare(b.date||''));  // chronological in the review
     openSchedReview(arr);
   }catch(err){
     host.innerHTML=`<span class="statusline err">⚠ ${esc(err.message)}</span>`;
@@ -934,7 +937,7 @@ function confirmSchedule(){
   for(const it of chosen){
     const note=[it.location?('מיקום: '+it.location):'', it.notes||''].filter(Boolean).join(' · ');
     list.push({
-      id:uid(), date:it.date, projectId, contractId,
+      id:uid(), date:normDate(it.date), projectId, contractId,
       client:(projectId?'':(it.production||'')), role:role||it.role||'',
       startTime:it.callTime||null, status:'unissued', tentative, notes:note, createdAt:Date.now()
     });
@@ -1092,9 +1095,12 @@ function computePay(wd){
   };
 }
 
-let _wdFilter='all', _wdView='list';
+let _wdFilter='all', _wdView='list', _wdSort='asc', _wdSel=new Set();
 function renderWorkdays(){
-  const list=load(LS.workdays,[]).slice().sort((a,b)=>(b.date||'').localeCompare(a.date||''));
+  const list=load(LS.workdays,[]).slice().sort((a,b)=>{
+    const da=normDate(a.date), db=normDate(b.date);
+    return _wdSort==='asc' ? da.localeCompare(db) : db.localeCompare(da);
+  });
   const host=document.getElementById('workdaysList');
   const contracts=load(LS.contracts,[]);
 
@@ -1120,7 +1126,7 @@ function renderWorkdays(){
   host.innerHTML = _wdView==='project' ? wdGroupedHtml(rows) : wdListHtml(rows);
 }
 
-function wdRowHtml(w,{showName=true}={}){
+function wdRowHtml(w,{showName=true, sel=false}={}){
   const p=computePay(w);
   const timeStr=(w.startTime&&w.endTime)?`<div class="faint" style="font-size:11px">${esc(w.startTime)}–${esc(w.endTime)}</div>`:'';
   const hrs=p.worked>0?`${p.worked} ש'${p.otHours>0?` <span class="faint">(+${(+p.otHours).toFixed(1).replace(/\.0$/,'')} ש"נ)</span>`:''}${timeStr}`:(timeStr||'—');
@@ -1133,7 +1139,9 @@ function wdRowHtml(w,{showName=true}={}){
     const cname=p.contractName?`<div class="faint" style="font-size:11.5px">${esc(p.contractName)}</div>`:'';
     nameCell=`<td>${dot}${name}${cname}</td>`;
   }
+  const selCell = sel? `<td onclick="event.stopPropagation()"><input type="checkbox" class="wd-sel" data-id="${w.id}" ${_wdSel.has(w.id)?'checked':''} onclick="wdToggleSel('${w.id}',this.checked)" style="width:auto"></td>` : '';
   return `<tr onclick="openWorkday('${w.id}')">
+    ${selCell}
     <td class="num">${fmtDate(w.date)}</td>
     ${nameCell}
     <td>${esc(w.role||'—')}</td>
@@ -1145,11 +1153,30 @@ function wdRowHtml(w,{showName=true}={}){
 }
 
 function wdListHtml(rows){
-  let html='<div class="tbl-wrap"><table class="data"><thead><tr>'+
+  let html='<div id="wdSelBar"></div><div class="tbl-wrap"><table class="data"><thead><tr>'+
+    '<th style="width:30px"><input type="checkbox" class="wd-all" onclick="wdToggleAll(this.checked)" title="בחר הכל" style="width:auto"></th>'+
     '<th>תאריך</th><th>הפקה / לקוח</th><th>תפקיד</th><th>שעות</th><th>שכר (ברוטו)</th><th>סטטוס</th><th></th>'+
     '</tr></thead><tbody>';
-  for(const w of rows) html+=wdRowHtml(w);
-  return html+'</tbody></table></div>';
+  for(const w of rows) html+=wdRowHtml(w,{sel:true});
+  html+='</tbody></table></div>';
+  setTimeout(updateWdSelBar,0);
+  return html;
+}
+/* ---- multi-select delete ---- */
+function updateWdSelBar(){
+  const bar=document.getElementById('wdSelBar'); if(!bar) return;
+  bar.innerHTML = _wdSel.size? `<div class="selbar"><span>נבחרו <b>${_wdSel.size}</b> ימים</span>
+    <button class="btn sm" style="background:var(--bad);color:#fff;border-color:var(--bad)" onclick="wdBulkDelete()">מחק נבחרים</button>
+    <button class="btn sm ghost" onclick="wdClearSel()">בטל בחירה</button></div>` : '';
+}
+function wdToggleSel(id,on){ if(on)_wdSel.add(id); else _wdSel.delete(id); updateWdSelBar(); }
+function wdToggleAll(on){ document.querySelectorAll('#workdaysList .wd-sel').forEach(cb=>{ cb.checked=on; if(on)_wdSel.add(cb.dataset.id); else _wdSel.delete(cb.dataset.id); }); updateWdSelBar(); }
+function wdClearSel(){ _wdSel.clear(); document.querySelectorAll('#workdaysList .wd-sel,#workdaysList .wd-all').forEach(cb=>cb.checked=false); updateWdSelBar(); }
+function wdBulkDelete(){
+  if(!_wdSel.size) return;
+  if(!confirm(`למחוק ${_wdSel.size} ימי עבודה? פעולה זו אינה הפיכה.`)) return;
+  save(LS.workdays, load(LS.workdays,[]).filter(w=>!_wdSel.has(w.id)));
+  _wdSel.clear(); renderWorkdays();
 }
 
 function wdGroupedHtml(rows){
@@ -1188,14 +1215,16 @@ function wdGroupedHtml(rows){
 function renderWdFilters(){
   const opts=[['all','הכל'],['confirmed','מאושרים'],['tentative','משוערים'],['unpaid','ממתינים לתשלום']];
   const chips=opts.map(([k,l])=>`<button class="chip ${_wdFilter===k?'on':''}" onclick="setWdFilter('${k}')">${l}</button>`).join('');
+  const sort=`<button class="chip" onclick="toggleWdSort()" title="מיון לפי תאריך">תאריך ${_wdSort==='asc'?'↑ ישן→חדש':'↓ חדש→ישן'}</button>`;
   const tog=`<div class="viewtog">
     <button class="${_wdView==='list'?'on':''}" onclick="setWdView('list')">רשימה</button>
     <button class="${_wdView==='project'?'on':''}" onclick="setWdView('project')">לפי פרויקט</button>
   </div>`;
-  document.getElementById('wdFilters').innerHTML=chips+tog;
+  document.getElementById('wdFilters').innerHTML=chips+sort+tog;
 }
 function setWdFilter(k){ _wdFilter=k; renderWorkdays(); }
 function setWdView(v){ _wdView=v; renderWorkdays(); }
+function toggleWdSort(){ _wdSort = _wdSort==='asc'?'desc':'asc'; renderWorkdays(); }
 
 function renderWdSummary(list){
   const now=new Date(), ym=now.getFullYear()+'-'+String(now.getMonth()+1).padStart(2,'0');
@@ -1305,7 +1334,7 @@ function readWdForm(){
   const num=id=>{ const x=v(id); return x===''?null:Number(x); };
   const projVal=v('wd_project');
   return {
-    date:v('wd_date'), projectId:(projVal&&projVal!=='__new')?projVal:null, contractId:v('wd_contract')||null,
+    date:normDate(v('wd_date')), projectId:(projVal&&projVal!=='__new')?projVal:null, contractId:v('wd_contract')||null,
     client:v('wd_client'), role:v('wd_role'),
     dayRate:num('wd_rate'), startTime:v('wd_start')||null, endTime:v('wd_end')||null, hoursWorked:num('wd_hours'),
     gearRental:num('wd_gear'), ring:v('wd_ring')||null, travel:num('wd_travel'), otherAdd:num('wd_other'),
@@ -1343,10 +1372,31 @@ function deleteWorkday(id){
   renderWorkdays();
 }
 function fmtDate(iso){
+  iso=normDate(iso);
   if(!iso) return '—';
   const d=new Date(iso+'T00:00:00'); if(isNaN(d)) return esc(iso);
   const days=['א׳','ב׳','ג׳','ד׳','ה׳','ו׳','ש׳'];
   return d.toLocaleDateString('he-IL',{day:'2-digit',month:'2-digit',year:'2-digit'})+' · '+days[d.getDay()];
+}
+/* Canonicalize any date string to zero-padded YYYY-MM-DD. Guards against the AI returning
+   "2026-7-5" or "5/7/2026" — non-canonical strings break both string-sort and calendar lookup. */
+function normDate(s){
+  if(!s) return '';
+  s=String(s).trim();
+  let m=s.match(/^(\d{4})-(\d{1,2})-(\d{1,2})$/);
+  if(m) return m[1]+'-'+m[2].padStart(2,'0')+'-'+m[3].padStart(2,'0');
+  m=s.match(/^(\d{1,2})[.\/-](\d{1,2})[.\/-](\d{2,4})$/);  // day-first (IL): DD/MM/YYYY
+  if(m){ let y=m[3]; if(y.length===2) y='20'+y; return y+'-'+m[2].padStart(2,'0')+'-'+m[1].padStart(2,'0'); }
+  const dt=new Date(s);
+  if(!isNaN(dt)) return dt.getFullYear()+'-'+String(dt.getMonth()+1).padStart(2,'0')+'-'+String(dt.getDate()).padStart(2,'0');
+  return s;
+}
+/* one-time/idempotent: rewrite any stored work-day dates to canonical form (fixes old/imported data) */
+function normalizeAllDates(){
+  const wds=load(LS.workdays,[]); let changed=false;
+  for(const w of wds){ if(w.date){ const n=normDate(w.date); if(n!==w.date){ w.date=n; changed=true; } } }
+  if(changed) localStorage.setItem(LS.workdays, JSON.stringify(wds));
+  return changed;
 }
 
 /* ============================================================
@@ -1474,9 +1524,9 @@ function renderCalendar(){
   const monthNames=['ינואר','פברואר','מרץ','אפריל','מאי','יוני','יולי','אוגוסט','ספטמבר','אוקטובר','נובמבר','דצמבר'];
   document.getElementById('calLabel').textContent=monthNames[ref.getMonth()]+' '+ref.getFullYear();
 
-  // map workdays by date
+  // map workdays by date (normalized → always matches the canonical cell iso)
   const byDate={};
-  for(const w of load(LS.workdays,[])){ if(!w.date) continue; (byDate[w.date]=byDate[w.date]||[]).push(w); }
+  for(const w of load(LS.workdays,[])){ const k=normDate(w.date); if(!k) continue; (byDate[k]=byDate[k]||[]).push(w); }
 
   const dow=['א׳','ב׳','ג׳','ד׳','ה׳','ו׳','ש׳'];
   let html=dow.map(d=>`<div class="caldow">${d}</div>`).join('');
@@ -1777,7 +1827,7 @@ async function onAuthed(){
       } else {                        // cloud is the shared truth → adopt it
         try{ await maybeSnapshot(); }catch(e){}   // snapshot local first (safety net)
         const incoming=JSON.stringify(cloud);
-        if(incoming!==JSON.stringify(dumpData())){ applyData(cloud); refreshView(); }
+        if(incoming!==JSON.stringify(dumpData())){ applyData(cloud); normalizeAllDates(); refreshView(); }
         _lastSyncedJSON=incoming;
         setSync('synced');
       }
@@ -1903,6 +1953,7 @@ function renderSyncUI(){
 document.addEventListener('input', e=>{ if(e.target && e.target.id==='au_email') localStorage.setItem('cf_lastEmail', e.target.value); });
 
 /* ---------- boot ---------- */
+normalizeAllDates();   // fix any legacy/imported non-canonical dates so sort + calendar are correct
 refreshKeyPill();
 renderDashboard();
 initBackup();
