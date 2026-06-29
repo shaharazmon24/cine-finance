@@ -1143,16 +1143,29 @@ function wdRowHtml(w,{showName=true, sel=false}={}){
     nameCell=`<td>${dot}${name}${cname}</td>`;
   }
   const selCell = sel? `<td onclick="event.stopPropagation()"><input type="checkbox" class="wd-sel" data-id="${w.id}" ${_wdSel.has(w.id)?'checked':''} onclick="wdToggleSel('${w.id}',this.checked)" style="width:auto"></td>` : '';
+  const roleTxt = esc(w.role || dayLabelRole(w) || '—');
   return `<tr onclick="openWorkday('${w.id}')">
     ${selCell}
     <td class="num">${fmtDate(w.date)}</td>
     ${nameCell}
-    <td>${esc(w.role||'—')}</td>
+    <td>${roleTxt}</td>
     <td class="num">${hrs}</td>
     <td class="num gross">${fmtMoney(Math.round(p.total))}${p.plusVat?'<span class="faint" style="font-weight:400"> כולל מע"מ</span>':''}</td>
-    <td>${st}</td>
+    <td onclick="event.stopPropagation();cycleStatus('${w.id}')" style="cursor:pointer" title="לחץ לשינוי סטטוס">${st}</td>
     <td onclick="event.stopPropagation()"><button class="rowdel" title="מחק" onclick="deleteWorkday('${w.id}')">🗑</button></td>
   </tr>`;
+}
+/* effective role for display (own → contract) */
+function dayLabelRole(w){ const c=resolveContract(w); return (c&&c.role)||''; }
+/* click the status badge to advance it inline — no need to open the day */
+function cycleStatus(id){
+  const list=load(LS.workdays,[]); const w=list.find(x=>x.id===id); if(!w) return;
+  if(w.tentative){ w.tentative=false; }                 // first click confirms a tentative day
+  else { const order=['unissued','issued','paid','overdue']; w.status=order[(order.indexOf(w.status||'unissued')+1)%order.length]; }
+  save(LS.workdays,list);
+  const sc=document.querySelector('.content'); const top=sc?sc.scrollTop:0;
+  renderWorkdays();
+  if(sc) sc.scrollTop=top;
 }
 
 function wdListHtml(rows){
@@ -1254,20 +1267,37 @@ function openWorkday(id, presetDate, presetProjectId){
     projectId:presetProjectId||null
   };
   document.getElementById('wdTitle').textContent = id?'עריכת יום עבודה':'יום עבודה חדש';
+  // resolve what this day inherits from its project → contract, so the form shows it instead of looking empty
+  const _proj = w.projectId? projectById(w.projectId):null;
+  const _inhC = resolveContract(w);
+  const _effClient = (_proj&&_proj.client)||'';
+  const _effRole = (_inhC&&_inhC.role)||'';
+  const _effRate = (_inhC&&_inhC.dayRate!=null)? _inhC.dayRate:'';
   const pOpts = '<option value="">— ללא פרויקט —</option>'+
     projects.map(p=>`<option value="${p.id}" ${w.projectId===p.id?'selected':''}>${esc(p.name||'פרויקט')}</option>`).join('')+
     '<option value="__new">+ פרויקט חדש…</option>';
-  const cOpts = '<option value="">— יורש מהפרויקט / ידני —</option>'+
+  const inheritLbl = (_proj&&_inhC)? '— יורש מהפרויקט: '+esc(_inhC.name||'חוזה')+' —' : '— יורש מהפרויקט / ידני —';
+  const cOpts = `<option value="">${inheritLbl}</option>`+
     contracts.map(c=>`<option value="${c.id}" ${w.contractId===c.id?'selected':''}>${esc(c.name||'חוזה')}${c.project?' · '+esc(c.project):''}</option>`).join('');
   const stOpts = WD_STATUS.map(([k,l])=>`<option value="${k}" ${ (w.status||'unissued')===k?'selected':''}>${l}</option>`).join('');
+  const inheritBanner = (_proj||_inhC)? `<div class="notice" style="margin-bottom:14px;display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+      ${_proj?`<span class="cdot" style="background:${projColor(w.projectId)}"></span><b>${esc(_proj.name)}</b>`:'<b>יום עצמאי</b>'}
+      <span class="faint">יורש אוטומטית:</span>
+      ${_inhC?`<span>חוזה <b>${esc(_inhC.name||'')}</b></span>`:''}
+      ${_effClient?`<span>· לקוח <b>${esc(_effClient)}</b></span>`:''}
+      ${_effRate!==''?`<span>· תעריף <b>${fmtMoney(_effRate)}</b></span>`:''}
+      ${_effRole?`<span>· תפקיד <b>${esc(_effRole)}</b></span>`:''}
+      <span class="faint" style="flex-basis:100%;font-size:11.5px">ערוך שדה רק כדי לעקוף ערך ליום הזה. השאר ריק = יורש מהפרויקט.</span>
+    </div>`:'';
   document.getElementById('wdBody').innerHTML=`
+    ${inheritBanner}
     <div class="grid" style="grid-template-columns:1fr 1fr">
       <label class="fld">תאריך<input type="date" id="wd_date" value="${esc(w.date||'')}"></label>
       <label class="fld">פרויקט<select id="wd_project" onchange="onWdProjectChange()">${pOpts}</select></label>
       <label class="fld">חוזה מקושר<select id="wd_contract" onchange="onWdContractChange()">${cOpts}</select></label>
-      <label class="fld">תפקיד<input type="text" id="wd_role" value="${esc(w.role||'')}" placeholder="צלם / מפעיל..."></label>
-      <label class="fld">לקוח / הפקה (אם שונה)<input type="text" id="wd_client" value="${esc(w.client||'')}" placeholder="ברירת מחדל מהפרויקט"></label>
-      <label class="fld">תעריף יומי ₪<input type="number" id="wd_rate" value="${w.dayRate!=null?esc(w.dayRate):''}" oninput="renderWdPreview()" placeholder="מהחוזה אם ריק"></label>
+      <label class="fld">תפקיד<input type="text" id="wd_role" value="${esc(w.role||'')}" placeholder="${_effRole?esc(_effRole)+' (מהחוזה)':'צלם / מפעיל...'}"></label>
+      <label class="fld">לקוח / הפקה (אם שונה)<input type="text" id="wd_client" value="${esc(w.client||'')}" placeholder="${_effClient?esc(_effClient)+' (מהפרויקט)':'ברירת מחדל מהפרויקט'}"></label>
+      <label class="fld">תעריף יומי ₪<input type="number" id="wd_rate" value="${w.dayRate!=null?esc(w.dayRate):''}" oninput="renderWdPreview()" placeholder="${_effRate!==''?_effRate+' (מהחוזה)':'מהחוזה אם ריק'}"></label>
       <label class="fld">שעת התחלה<input type="time" id="wd_start" value="${esc(w.startTime||'')}" oninput="onWdTimeChange()"></label>
       <label class="fld">שעת סיום<input type="time" id="wd_end" value="${esc(w.endTime||'')}" oninput="onWdTimeChange()"></label>
       <label class="fld">סה"כ שעות<input type="number" id="wd_hours" step="0.25" value="${w.hoursWorked!=null?esc(w.hoursWorked):''}" oninput="renderWdPreview()" placeholder="אוטומטי מהשעות"></label>
