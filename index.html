@@ -1426,16 +1426,32 @@ function openProject(id, fromWorkday){
     <label class="fld" style="margin-top:12px">הערות<textarea id="pj_notes" rows="2">${esc(p.notes||'')}</textarea></label>
     <div style="border-top:1px solid var(--line);margin-top:16px;padding-top:14px">
       <h4 style="margin:0 0 4px;font-weight:500">ימי צילום ${id?`<span class="faint" style="font-weight:400">· ${load(LS.workdays,[]).filter(w=>w.projectId===id).length} ימים מקושרים</span>`:''}</h4>
-      <p class="faint" style="margin:0 0 10px;font-size:12px;line-height:1.6">צור סדרת ימים באותם תנאי הפרויקט בבת אחת (למשל 14 ימי צילום). כל יום יישאר ניתן לעריכה בנפרד — שעות, תאריך, ביטול — ותוכל להוסיף ימים מאוחר יותר.</p>
-      <div class="grid" style="grid-template-columns:1.2fr .8fr auto; align-items:end; gap:10px">
-        <label class="fld">מתאריך<input type="date" id="pj_genStart" value="${new Date().toISOString().slice(0,10)}"></label>
-        <label class="fld">מספר ימים<input type="number" id="pj_genCount" min="1" value="14"></label>
-        <button class="btn sm" onclick="generateDaysFromModal()">צור ימים</button>
-      </div>
-      <label class="fld" style="margin-top:8px"><span class="row" style="gap:8px"><input type="checkbox" id="pj_genSkipSat" style="width:auto"> דלג על שבת</span></label>
-      <div id="pj_genMsg" style="font-size:12.5px;margin-top:8px;min-height:16px;color:var(--good)"></div>
+      <p class="faint" style="margin:0 0 10px;font-size:12px;line-height:1.6">צור סדרת ימים באותם תנאי הפרויקט בבת אחת — לפי טווח תאריכים או מספר ימים. כל יום יישאר ניתן לעריכה, שינוי או מחיקה בנפרד, וכולם מקושרים לאותו פרויקט וחוזה.</p>
+      <div id="pj_genSection"></div>
     </div>`;
+  renderGenSection();
   openModal('projModal');
+}
+let _genMode='range';
+function setGenMode(m){ _genMode=m; renderGenSection(); }
+function renderGenSection(){
+  const el=document.getElementById('pj_genSection'); if(!el) return;
+  const today=new Date().toISOString().slice(0,10);
+  const tog=`<div class="viewtog" style="margin-bottom:10px">
+    <button class="${_genMode==='range'?'on':''}" onclick="setGenMode('range')">טווח תאריכים</button>
+    <button class="${_genMode==='count'?'on':''}" onclick="setGenMode('count')">מספר ימים</button>
+  </div>`;
+  const inputs = _genMode==='range'
+    ? `<label class="fld">מתאריך<input type="date" id="pj_genStart" value="${today}"></label>
+       <label class="fld">עד תאריך<input type="date" id="pj_genEnd" value="${today}"></label>`
+    : `<label class="fld">מתאריך<input type="date" id="pj_genStart" value="${today}"></label>
+       <label class="fld">מספר ימים<input type="number" id="pj_genCount" min="1" value="14"></label>`;
+  el.innerHTML=`${tog}
+    <div class="grid" style="grid-template-columns:1fr 1fr auto; align-items:end; gap:10px">
+      ${inputs}<button class="btn sm" onclick="generateDaysFromModal()">צור ימים</button>
+    </div>
+    <label class="fld" style="margin-top:8px"><span class="row" style="gap:8px"><input type="checkbox" id="pj_genSkipSat" style="width:auto"> דלג על שבת</span></label>
+    <div id="pj_genMsg" style="font-size:12.5px;margin-top:8px;min-height:16px;color:var(--good)"></div>`;
 }
 function pickProjColor(c){
   _projColor=c;
@@ -1479,16 +1495,41 @@ function generateProjectDays(projectId, startISO, count, skipSat){
   save(LS.workdays,list);
   return created;
 }
+/* generate every consecutive day between two dates (inclusive) under a project */
+function generateProjectDaysRange(projectId, startISO, endISO, skipSat){
+  const list=load(LS.workdays,[]); let created=0;
+  const d=new Date(startISO+'T00:00:00'), end=new Date(endISO+'T00:00:00');
+  let guard=0;
+  while(d<=end && guard++<2000){
+    if(!(skipSat && d.getDay()===6)){
+      const iso=d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
+      list.push({ id:uid(), projectId, date:iso, status:'unissued', tentative:false, createdAt:Date.now() });
+      created++;
+    }
+    d.setDate(d.getDate()+1);
+  }
+  save(LS.workdays,list);
+  return created;
+}
 function generateDaysFromModal(){
   const id=persistProjectFromModal(); if(!id) return;
   const start=document.getElementById('pj_genStart').value;
-  const count=parseInt(document.getElementById('pj_genCount').value,10);
   const skipSat=document.getElementById('pj_genSkipSat').checked;
   const msg=document.getElementById('pj_genMsg');
-  if(!start || !count || count<1){ msg.style.color='var(--bad)'; msg.textContent='בחר תאריך התחלה ומספר ימים תקין.'; return; }
-  const created=generateProjectDays(id, start, count, skipSat);
+  const fail=t=>{ msg.style.color='var(--bad)'; msg.textContent=t; };
+  let created;
+  if(_genMode==='range'){
+    const end=document.getElementById('pj_genEnd').value;
+    if(!start || !end){ return fail('בחר תאריך התחלה ותאריך סיום.'); }
+    if(end<start){ return fail('תאריך הסיום מוקדם מתאריך ההתחלה.'); }
+    created=generateProjectDaysRange(id, start, end, skipSat);
+  } else {
+    const count=parseInt(document.getElementById('pj_genCount').value,10);
+    if(!start || !count || count<1){ return fail('בחר תאריך התחלה ומספר ימים תקין.'); }
+    created=generateProjectDays(id, start, count, skipSat);
+  }
   msg.style.color='var(--good)';
-  msg.textContent=`✓ נוצרו ${created} ימי עבודה תחת הפרויקט. אפשר לערוך כל אחד בנפרד מהלוח או מימי העבודה.`;
+  msg.textContent=`✓ נוצרו ${created} ימי עבודה תחת הפרויקט. כל יום ניתן לעריכה/מחיקה בנפרד מהלוח או מימי העבודה.`;
   refreshView();
 }
 function deleteProjectFromModal(){ if(_editingProjId) deleteProject(_editingProjId); }
