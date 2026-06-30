@@ -265,7 +265,8 @@ td[title="לחץ לשינוי סטטוס"]:hover .st{border-color:var(--accent-d
 .pgroup table.data th{background:transparent}
 
 /* ---------- Calendar (Google-style) ---------- */
-.cal-head{display:flex;align-items:center;gap:14px;margin-bottom:16px}
+.cal-head{display:flex;align-items:center;gap:14px;margin-bottom:16px;flex-wrap:wrap}
+.cal-actions{display:contents}
 .cal-head h2{margin:0;font-size:24px;font-weight:700;min-width:170px;letter-spacing:-.3px}
 .cal-nav{display:inline-flex;gap:4px}
 .cal-nav button{width:34px;height:34px;border-radius:9px;background:var(--panel2);border:1px solid var(--line2);color:var(--text);font-size:16px;display:flex;align-items:center;justify-content:center}
@@ -343,6 +344,14 @@ td[title="לחץ לשינוי סטטוס"]:hover .st{border-color:var(--accent-d
   /* stack multi-column form grids */
   [style*="1fr 1fr"]{grid-template-columns:1fr!important}
   /* tighter calendar */
+  .content{overflow-x:hidden}
+  .cal-head{gap:8px}
+  .cal-head h2{font-size:16px;order:1}
+  .cal-nav{order:0}
+  .cal-head>.btn.sm.ghost{order:2;margin-inline-start:auto}
+  .cal-head .spacer{display:none}
+  .cal-actions{display:flex;flex-basis:100%;gap:7px;order:3}
+  .cal-actions .btn{flex:1;min-width:0;white-space:nowrap;font-size:12px;padding:0 8px;height:38px;justify-content:center}
   .calgrid{gap:1px}
   .calcell{min-height:62px; padding:3px 4px}
   .calcell .cnum{width:20px;height:20px;font-size:11px}
@@ -435,9 +444,11 @@ td[title="לחץ לשינוי סטטוס"]:hover .st{border-color:var(--accent-d
           <h2 id="calLabel"></h2>
           <button class="btn sm ghost" onclick="calToday()">היום</button>
           <div class="spacer" style="flex:1"></div>
-          <button class="btn sm" onclick="openProject()" title="צור פרויקט רב-ימים (טווח תאריכים)">+ פרויקט</button>
-          <button class="btn sm" onclick="pickScheduleFile()" title="העלה קולשיט/צילום מסך לשיבוץ אוטומטי">✦ שבץ מקובץ</button>
-          <button class="btn primary sm" onclick="openWorkday()">+ יום עבודה</button>
+          <div class="cal-actions">
+            <button class="btn sm" onclick="openProject()" title="צור פרויקט רב-ימים (טווח תאריכים)">+ פרויקט</button>
+            <button class="btn sm" onclick="pickScheduleFile()" title="העלה קולשיט/צילום מסך לשיבוץ אוטומטי">✦ שבץ מקובץ</button>
+            <button class="btn primary sm" onclick="openWorkday()">+ יום עבודה</button>
+          </div>
         </div>
         <div class="calgrid" id="calGrid"></div>
         <div class="cal-legend" id="calLegend"></div>
