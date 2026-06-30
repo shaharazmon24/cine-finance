@@ -96,25 +96,26 @@ main{flex:1; display:flex; flex-direction:column; min-width:0}
 .faint{color:var(--faint)}
 .grid{display:grid; gap:14px}
 .row{display:flex; gap:12px; align-items:center}
-label.fld{display:flex; flex-direction:column; gap:5px; font-size:13px; color:var(--muted)}
+label.fld{display:flex; flex-direction:column; gap:6px; font-size:12.5px; color:var(--muted)}
 label.fld input,label.fld select,label.fld textarea{
-  background:var(--bg2); border:1px solid var(--line2); border-radius:9px; padding:10px 12px;
-  color:var(--text); font-size:14px; width:100%;
+  background:var(--bg2); border:1px solid var(--line2); border-radius:10px; padding:11px 13px;
+  color:var(--text); font-size:14px; width:100%; transition:border-color .14s, box-shadow .14s;
 }
-label.fld input:focus,label.fld select:focus,label.fld textarea:focus{outline:none;border-color:var(--accent-dim)}
-.tag{display:inline-block; font-size:11px; padding:3px 9px; border-radius:999px; border:1px solid var(--line2); color:var(--muted)}
-.tag.act{border-color:var(--accent-dim); color:var(--accent)}
+label.fld input::placeholder,label.fld textarea::placeholder{color:var(--faint)}
+label.fld input:focus,label.fld select:focus,label.fld textarea:focus{outline:none;border-color:var(--accent-dim);box-shadow:0 0 0 3px rgba(224,177,94,.12)}
+.tag{display:inline-block; font-size:11px; padding:3px 10px; border-radius:999px; border:1px solid var(--line2); color:var(--muted)}
+.tag.act{border-color:var(--accent-dim); color:var(--accent); background:rgba(224,177,94,.06)}
 .empty{text-align:center; color:var(--faint); padding:64px 20px; font-size:14.5px}
 .empty .big{font-size:42px; opacity:.35; margin-bottom:14px}
 
 /* ---------- Dropzone ---------- */
 .dropzone{
-  border:2px dashed var(--line2); border-radius:var(--r); padding:46px 24px; text-align:center;
-  transition:.2s; cursor:pointer; background:var(--bg2);
+  border:1.5px dashed var(--line2); border-radius:16px; padding:50px 24px; text-align:center;
+  transition:border-color .2s, background .2s, box-shadow .2s; cursor:pointer; background:var(--bg2);
 }
-.dropzone:hover,.dropzone.over{border-color:var(--accent); background:#15171f}
-.dropzone .ic{font-size:42px; margin-bottom:10px}
-.dropzone h3{margin:0 0 6px; font-weight:500}
+.dropzone:hover,.dropzone.over{border-color:var(--accent); background:#15171f; box-shadow:0 0 0 4px rgba(224,177,94,.07)}
+.dropzone .ic{font-size:40px; margin-bottom:12px; opacity:.85}
+.dropzone h3{margin:0 0 7px; font-weight:600; font-size:17px}
 
 /* ---------- Modal ---------- */
 .modal-bg{
@@ -167,17 +168,18 @@ label.fld input:focus,label.fld select:focus,label.fld textarea:focus{outline:no
 
 /* contract list */
 .clist{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:14px}
-.ccard{background:var(--panel);border:1px solid var(--line);border-radius:var(--r);padding:16px;transition:.15s;position:relative}
-.ccard:hover{border-color:var(--line2)}
-.ccard h3{margin:0 0 4px;font-size:16px;font-weight:500}
-.ccard .meta{color:var(--muted);font-size:13px;margin-bottom:12px}
-.ccard .kv{display:flex;justify-content:space-between;font-size:13px;padding:4px 0;border-top:1px solid var(--line)}
+.ccard{background:var(--panel);border:1px solid var(--line);border-radius:var(--r);padding:18px;transition:border-color .15s, transform .15s, box-shadow .15s;position:relative;box-shadow:0 2px 16px rgba(0,0,0,.16)}
+.ccard:hover{border-color:var(--line2);transform:translateY(-2px);box-shadow:0 8px 28px rgba(0,0,0,.28)}
+.ccard h3{margin:0 0 5px;font-size:16px;font-weight:600;letter-spacing:-.2px}
+.ccard .meta{color:var(--muted);font-size:13px;margin-bottom:14px;display:flex;align-items:center;gap:7px;flex-wrap:wrap}
+.ccard .kv{display:flex;justify-content:space-between;font-size:13px;padding:7px 0;border-top:1px solid var(--line)}
 .ccard .kv span:first-child{color:var(--faint)}
-.ccard .actions{display:flex;gap:8px;margin-top:12px}
+.ccard .kv span:last-child{font-variant-numeric:tabular-nums}
+.ccard .actions{display:flex;gap:8px;margin-top:14px}
 .ccard .del{position:absolute;top:10px;inset-inline-end:10px;background:transparent;border:0;color:var(--faint);font-size:15px;width:28px;height:28px;border-radius:8px;display:flex;align-items:center;justify-content:center;transition:.12s;z-index:2}
 .ccard .del:hover{color:var(--bad);background:rgba(232,104,95,.12)}
 .ccard h3{padding-inline-end:30px}
-.confbadge{font-size:11px;padding:2px 8px;border-radius:999px}
+.confbadge{font-size:11px;padding:3px 10px;border-radius:999px;font-weight:600}
 .confbadge.high{background:rgba(95,200,143,.15);color:var(--good)}
 .confbadge.med{background:rgba(232,161,95,.15);color:var(--warn)}
 .confbadge.low{background:rgba(232,104,95,.15);color:var(--bad)}
@@ -217,9 +219,10 @@ table.data .gross{color:var(--accent);font-weight:600}
 .st.overdue{color:var(--bad);border-color:rgba(232,104,95,.4);background:rgba(232,104,95,.08)} .st.overdue .d{background:var(--bad)}
 .st.tentative{color:var(--warn);border-color:rgba(232,161,95,.35);background:rgba(232,161,95,.07)} .st.tentative .d{background:var(--warn)}
 td[title="לחץ לשינוי סטטוס"]:hover .st{border-color:var(--accent-dim)}
-.paybreak{font-size:12px;color:var(--muted);line-height:1.7;background:var(--bg2);border:1px solid var(--line);border-radius:10px;padding:11px 13px;margin-top:6px}
+.paybreak{font-size:12.5px;color:var(--muted);line-height:1.9;background:var(--bg2);border:1px solid var(--line);border-radius:12px;padding:13px 15px;margin-top:6px}
 .paybreak .ln{display:flex;justify-content:space-between;gap:12px}
-.paybreak .ln.tot{border-top:1px solid var(--line2);margin-top:5px;padding-top:6px;color:var(--text);font-weight:500}
+.paybreak .ln.tot{border-top:1px solid var(--line2);margin-top:7px;padding-top:8px;color:var(--text);font-weight:600;font-size:14px}
+.paybreak .ln.tot .num{color:var(--accent)}
 .paybreak .ln .num{font-variant-numeric:tabular-nums}
 .filters{display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap}
 .chip{background:var(--panel);border:1px solid var(--line2);color:var(--muted);border-radius:999px;padding:7px 15px;font-size:13px;transition:.12s}
@@ -274,11 +277,12 @@ td[title="לחץ לשינוי סטטוס"]:hover .st{border-color:var(--accent-d
 .swatch.on{border-color:var(--text);box-shadow:0 0 0 2px var(--bg)}
 
 /* ---------- Contract signing ---------- */
-.sign-toolbar{position:sticky;top:0;z-index:20;display:flex;flex-wrap:wrap;align-items:center;gap:8px;background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:10px 12px;margin-bottom:16px}
+.sign-toolbar{position:sticky;top:0;z-index:20;display:flex;flex-wrap:wrap;align-items:center;gap:8px;background:var(--panel);border:1px solid var(--line2);border-radius:14px;padding:11px 13px;margin-bottom:16px;box-shadow:0 4px 22px rgba(0,0,0,.28)}
 .sign-toolbar .sep{width:1px;align-self:stretch;background:var(--line2);margin:0 4px}
-.tool{background:var(--panel2);border:1px solid var(--line2);color:var(--text);border-radius:9px;padding:8px 12px;font-size:13.5px;display:inline-flex;align-items:center;gap:6px}
+.tool{background:var(--panel2);border:1px solid var(--line2);color:var(--text);border-radius:9px;padding:8px 13px;font-size:13.5px;display:inline-flex;align-items:center;gap:6px;transition:.12s}
 .tool:hover{border-color:var(--accent-dim)}
-.tool.armed{background:var(--accent);color:#1a1205;border-color:var(--accent);font-weight:600}
+.tool:active{transform:translateY(1px)}
+.tool.armed{background:var(--accent);color:#1a1205;border-color:var(--accent);font-weight:600;box-shadow:0 2px 14px rgba(224,177,94,.22)}
 .sign-pages{display:flex;flex-direction:column;align-items:center;gap:18px;padding-bottom:30px}
 .sign-page{position:relative;box-shadow:0 6px 30px rgba(0,0,0,.5);line-height:0;cursor:crosshair}
 .sign-page canvas{display:block;border-radius:2px}
@@ -290,7 +294,7 @@ td[title="לחץ לשינוי סטטוס"]:hover .st{border-color:var(--accent-d
 .sfield:hover .sx{display:flex}
 .sigpad-wrap{background:#fff;border-radius:10px;border:1px solid var(--line2);touch-action:none}
 .sigpad-wrap canvas{display:block;width:100%;border-radius:10px;cursor:crosshair}
-.sign-side{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:16px}
+.sign-side{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:18px;box-shadow:0 2px 16px rgba(0,0,0,.16)}
 
 /* ---------- Mobile / phone layout ---------- */
 @media (max-width:760px){
