@@ -343,22 +343,20 @@ td[title="לחץ לשינוי סטטוס"]:hover .st{border-color:var(--accent-d
   .modal-foot{flex-wrap:wrap}
   /* stack multi-column form grids */
   [style*="1fr 1fr"]{grid-template-columns:1fr!important}
-  /* tighter calendar */
-  .content{overflow-x:hidden}
+  /* tighter calendar — force 7 equal columns with no min-content blowout */
   .cal-head{gap:8px}
-  .cal-head h2{font-size:16px;order:1}
+  .cal-head h2{font-size:17px;min-width:0;order:1}
   .cal-nav{order:0}
   .cal-head>.btn.sm.ghost{order:2;margin-inline-start:auto}
   .cal-head .spacer{display:none}
   .cal-actions{display:flex;flex-basis:100%;gap:7px;order:3}
   .cal-actions .btn{flex:1;min-width:0;white-space:nowrap;font-size:12px;padding:0 8px;height:38px;justify-content:center}
-  .calgrid{gap:1px}
-  .calcell{min-height:62px; padding:3px 4px}
+  .calgrid{gap:1px;grid-template-columns:repeat(7,minmax(0,1fr))}
+  .calcell{min-height:62px;padding:3px 4px;min-width:0;overflow:hidden}
   .calcell .cnum{width:20px;height:20px;font-size:11px}
-  .cev{font-size:9.5px; padding:2px 4px}
+  .cev{font-size:9.5px;padding:2px 4px;border-inline-start-width:2px}
   .cev .cv{display:none}              /* hide the ₪k tag on tiny cells */
-  .caldow{font-size:10px;padding:6px 0}
-  .cal-head h2{font-size:18px;min-width:0}
+  .caldow{font-size:10px;padding:6px 0;letter-spacing:0;min-width:0;overflow:hidden}
   /* tables scroll sideways instead of squashing */
   .tbl-wrap,.pgroup>div{overflow-x:auto}
   table.data th,table.data td{padding:9px 8px;font-size:13px;white-space:nowrap}
