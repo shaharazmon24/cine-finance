@@ -219,6 +219,17 @@ table.data .gross{color:var(--accent);font-weight:600}
 .st.overdue{color:var(--bad);border-color:rgba(232,104,95,.4);background:rgba(232,104,95,.08)} .st.overdue .d{background:var(--bad)}
 .st.tentative{color:var(--warn);border-color:rgba(232,161,95,.35);background:rgba(232,161,95,.07)} .st.tentative .d{background:var(--warn)}
 td[title="לחץ לשינוי סטטוס"]:hover .st{border-color:var(--accent-dim)}
+/* work-day cards (phone) */
+.wd-cards{display:flex;flex-direction:column;gap:10px}
+.wd-card{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:13px 15px;box-shadow:0 2px 14px rgba(0,0,0,.16);cursor:pointer;transition:border-color .12s}
+.wd-card:active{border-color:var(--line2)}
+.wd-card-top{display:flex;align-items:center;gap:10px;margin-bottom:6px}
+.wd-card-date{font-size:13px;color:var(--muted);font-variant-numeric:tabular-nums}
+.wd-card-name{font-size:15px;font-weight:600;display:flex;align-items:center;gap:7px;margin-bottom:3px;letter-spacing:-.2px}
+.wd-card-meta{font-size:12.5px;color:var(--muted);margin-bottom:10px;line-height:1.4}
+.wd-card-foot{display:flex;justify-content:space-between;align-items:center;gap:10px}
+.wd-card-gross{color:var(--accent);font-weight:600;font-variant-numeric:tabular-nums;font-size:15px}
+.wd-card-gross .faint{font-weight:400;font-size:11px}
 .paybreak{font-size:12.5px;color:var(--muted);line-height:1.9;background:var(--bg2);border:1px solid var(--line);border-radius:12px;padding:13px 15px;margin-top:6px}
 .paybreak .ln{display:flex;justify-content:space-between;gap:12px}
 .paybreak .ln.tot{border-top:1px solid var(--line2);margin-top:7px;padding-top:8px;color:var(--text);font-weight:600;font-size:14px}
@@ -337,8 +348,14 @@ td[title="לחץ לשינוי סטטוס"]:hover .st{border-color:var(--accent-d
   .tbl-wrap,.pgroup>div{overflow-x:auto}
   table.data th,table.data td{padding:9px 8px;font-size:13px;white-space:nowrap}
   .viewtog{margin-inline-start:0}
-  .summ{min-width:calc(50% - 5px); flex:1}
+  .summ-bar{gap:10px}
+  .summ{min-width:calc(50% - 5px); flex:1 1 calc(50% - 5px)}
   .stat .v{font-size:22px}
+  /* sign view: dropzone + details stack vertically on phone (PDF pages already
+     render at the container width via JS, so no CSS scaling — it would offset fields) */
+  #view-sign .grid{grid-template-columns:1fr!important}
+  .sign-toolbar{gap:6px;padding:9px 10px}
+  .tool{padding:7px 10px;font-size:12.5px}
   /* dashboard hero stacks on phone */
   .dash-hero{grid-template-columns:1fr}
   .dash-hero-main{padding:22px 20px;border-inline-end:0;border-bottom:1px solid var(--line)}
@@ -1256,7 +1273,35 @@ function cycleStatus(id){
   if(sc) sc.scrollTop=top;
 }
 
+function isMobile(){ return window.innerWidth<=760; }
+/* compact, tappable work-day card for phone (replaces the wide table) */
+function wdCardHtml(w,{showName=true}={}){
+  const p=computePay(w);
+  const dot=`<span class="cdot" style="background:${w.projectId?projColor(w.projectId):'#6b7280'}"></span>`;
+  const role=esc(w.role||dayLabelRole(w)||''), times=(w.startTime&&w.endTime)?` · ${esc(w.startTime)}–${esc(w.endTime)}`:'';
+  const hrs=p.worked>0?`${p.worked} ש'${p.otHours>0?` +${(+p.otHours).toFixed(1).replace(/\.0$/,'')} ש"נ`:''}`:'';
+  const meta=[role,hrs].filter(Boolean).join(' · ')+times;
+  const st=w.tentative?`<span class="st tentative"><span class="d"></span>משוער</span>`:`<span class="st ${w.status||'unissued'}"><span class="d"></span>${statusLabel(w.status||'unissued')}</span>`;
+  const nameLine=showName?`<div class="wd-card-name">${dot} ${esc(dayLabel(w)||'—')}</div>`:'';
+  return `<div class="wd-card" onclick="openWorkday('${w.id}')">
+    <div class="wd-card-top">
+      <label onclick="event.stopPropagation()" style="display:flex"><input type="checkbox" class="wd-sel" data-id="${w.id}" ${_wdSel.has(w.id)?'checked':''} onclick="wdToggleSel('${w.id}',this.checked)" style="width:auto"></label>
+      <span class="wd-card-date">${fmtDate(w.date)}</span>
+      <button class="rowdel" style="margin-inline-start:auto" onclick="event.stopPropagation();deleteWorkday('${w.id}')">🗑</button>
+    </div>
+    ${nameLine}
+    ${meta.trim()?`<div class="wd-card-meta">${meta}</div>`:''}
+    <div class="wd-card-foot">
+      <span class="wd-card-gross">${fmtMoney(Math.round(p.total))}${p.plusVat?' <span class="faint">כולל מע"מ</span>':''}</span>
+      <span onclick="event.stopPropagation();cycleStatus('${w.id}')" style="cursor:pointer" title="לחץ לשינוי">${st}</span>
+    </div>
+  </div>`;
+}
 function wdListHtml(rows){
+  if(isMobile()){
+    setTimeout(updateWdSelBar,0);
+    return '<div id="wdSelBar"></div><div class="wd-cards">'+rows.map(w=>wdCardHtml(w)).join('')+'</div>';
+  }
   let html='<div id="wdSelBar"></div><div class="tbl-wrap"><table class="data"><thead><tr>'+
     '<th style="width:30px"><input type="checkbox" class="wd-all" onclick="wdToggleAll(this.checked)" title="בחר הכל" style="width:auto"></th>'+
     '<th>תאריך</th><th>הפקה / לקוח</th><th>תפקיד</th><th>שעות</th><th>שכר (ברוטו)</th><th>סטטוס</th><th></th>'+
@@ -1301,9 +1346,14 @@ function wdGroupedHtml(rows){
     const title = proj? esc(proj.name||'פרויקט') : 'ללא פרויקט';
     const meta = proj && proj.client? `<span class="pmeta">· ${esc(proj.client)}</span>`:'';
     const editBtn = proj? `<button class="edit" title="הוסף יום לפרויקט" onclick="event.stopPropagation();openWorkday(null,null,'${proj.id}')">+ יום</button><button class="edit" title="ערוך פרויקט" onclick="event.stopPropagation();openProject('${proj.id}')">✎</button>`:'';
-    let body='<table class="data"><thead><tr><th>תאריך</th><th>תפקיד</th><th>שעות</th><th>שכר (ברוטו)</th><th>סטטוס</th><th></th></tr></thead><tbody>';
-    for(const w of days) body+=wdRowHtml(w,{showName:false});
-    body+='</tbody></table>';
+    let body;
+    if(isMobile()){
+      body='<div class="wd-cards" style="padding:12px">'+days.map(w=>wdCardHtml(w,{showName:false})).join('')+'</div>';
+    } else {
+      body='<table class="data"><thead><tr><th>תאריך</th><th>תפקיד</th><th>שעות</th><th>שכר (ברוטו)</th><th>סטטוס</th><th></th></tr></thead><tbody>';
+      for(const w of days) body+=wdRowHtml(w,{showName:false});
+      body+='</tbody></table>';
+    }
     html+=`<div class="pgroup" style="border-inline-start:0">
       <div class="pgroup-head" style="border-inline-start-color:${color}" onclick="this.nextElementSibling.style.display=this.nextElementSibling.style.display==='none'?'block':'none'">
         <span class="cdot" style="background:${color}"></span>
@@ -2398,6 +2448,9 @@ renderDashboard();
 initBackup();
 initSync();
 setInterval(renderBackupPill, 60000);
+/* re-render work days when crossing the phone/desktop breakpoint (table ↔ cards) */
+let _rsWasMobile=isMobile(), _rsT;
+window.addEventListener('resize',()=>{ clearTimeout(_rsT); _rsT=setTimeout(()=>{ const m=isMobile(); if(m!==_rsWasMobile){ _rsWasMobile=m; if(_currentView==='workdays') renderWorkdays(); } },180); });
 </script>
 </body>
 </html>
