@@ -1026,16 +1026,50 @@ function openSchedReview(items){
   openModal('schedModal');
 }
 function renderSchedReview(){
+  const live=_schedItems.filter(it=>it._keep);
+
+  // ── UPDATE MODE: diff table (old date → new date) ──────────────────────
+  if(_schedUpdateMode && _schedUpdateProjId){
+    const projDays=load(LS.workdays,[]).filter(w=>w.projectId===_schedUpdateProjId)
+      .sort((a,b)=>(a.date||'').localeCompare(b.date||''));
+    const fmt=iso=>{ if(!iso) return '—'; const [y,m,d]=iso.split('-'); return `${d}/${m}/${y}`; };
+    let rows=''; let idx=0;
+    _schedItems.forEach((it,i)=>{
+      if(!it._keep) return;
+      const old=projDays[idx]; idx++;
+      const oldDate=old?fmt(old.date):'יום חדש';
+      const oldStyle=old?'color:var(--muted)':'color:var(--warn)';
+      rows+=`<tr id="schrow-${i}">
+        <td><input type="checkbox" class="sch-on" data-i="${i}" ${it._on!==false?'checked':''} style="width:auto"></td>
+        <td style="${oldStyle};font-variant-numeric:tabular-nums;white-space:nowrap;font-size:13px">${esc(oldDate)}</td>
+        <td style="color:var(--accent);font-size:18px;padding:0 4px;font-weight:300">→</td>
+        <td><input type="date" class="sch-f" data-i="${i}" data-k="date" value="${esc(it.date||'')}" style="min-width:140px;font-weight:600;color:var(--text)"></td>
+        <td><input type="time" class="sch-f" data-i="${i}" data-k="callTime" value="${esc(it.callTime||'')}" style="width:110px"></td>
+        <td><button class="rowdel" title="הסר שורה" onclick="schedRemoveRow(${i})">🗑</button></td>
+      </tr>`;
+    });
+    const extra=projDays.length>live.length?`<div style="color:var(--warn);font-size:12.5px;margin-top:8px">⚠ הפרויקט מכיל ${projDays.length} ימים; הקובץ הכיל ${live.length}. הימים הנותרים <b>לא ישתנו</b>.</div>`:'';
+    document.getElementById('schedBody').innerHTML=`
+      <div class="notice" style="margin-bottom:14px;gap:10px">
+        <div>✦ <b>AI חילץ ${live.length} תאריכים חדשים מהקובץ</b> — אלה <em>התאריכים מהתמונה</em>, לא הישנים.</div>
+        <div class="faint" style="font-size:12.5px">עמודה שמאל = תאריך קיים בפרויקט · עמודה ימין = <b>תאריך חדש מהתמונה</b> (ניתן לעריכה). בטל ✕ שורה כדי לדלג עליה.</div>
+      </div>
+      <div class="tbl-wrap"><table class="data"><thead><tr>
+        <th><input type="checkbox" id="sch_all" ${live.every(it=>it._on!==false)?'checked':''} style="width:auto" onchange="schedToggleAll(this.checked)"></th>
+        <th>תאריך נוכחי</th><th></th><th>תאריך חדש (מהתמונה) ✎</th><th>שעת קריאה</th><th></th>
+      </tr></thead><tbody>${rows}</tbody></table></div>${extra}`;
+    return;
+  }
+
+  // ── NORMAL IMPORT MODE ─────────────────────────────────────────────────
   const projects=load(LS.projects,[]), contracts=load(LS.contracts,[]);
   const pOpts='<option value="">— ללא פרויקט —</option>'+
     projects.map(p=>`<option value="${p.id}" ${_schedProj===p.id?'selected':''}>${esc(p.name||'פרויקט')}</option>`).join('')+
     '<option value="__new">+ פרויקט חדש…</option>';
   const cOpts='<option value="">— ללא חוזה —</option>'+
     contracts.map(c=>`<option value="${c.id}" ${_schedContract===c.id?'selected':''}>${esc(c.name||'חוזה')}${c.project?' · '+esc(c.project):''}</option>`).join('');
-  // quick-fill suggestions for the production field
   const prodSet=new Set([...projects.map(p=>p.name), ..._schedItems.map(i=>i.production)].filter(Boolean));
   const dlist='<datalist id="sch_prodlist">'+[...prodSet].map(p=>`<option value="${esc(p)}"></option>`).join('')+'</datalist>';
-  const live=_schedItems.filter(it=>it._keep);
   let rows='';
   _schedItems.forEach((it,i)=>{
     if(!it._keep) return;
@@ -1049,10 +1083,7 @@ function renderSchedReview(){
     </tr>`;
   });
   document.getElementById('schedBody').innerHTML=`
-    <div class="notice" style="margin-bottom:14px">${_schedUpdateMode
-      ? `${live.length} תאריכים חדשים מהקובץ. הם יוחלו <b>על הימים הקיימים בפרויקט לפי סדר</b> — בדוק ואשר. שום דבר לא יישמר עד שתלחץ "עדכן תאריכים".`
-      : `${live.length} ימי צילום בייבוא. סמן אילו להוסיף, ערוך, או הסר ימים מיותרים (🗑). שום דבר לא נכתב ללוח עד שתאשר.`
-    }</div>
+    <div class="notice" style="margin-bottom:14px">${live.length} ימי צילום בייבוא. סמן אילו להוסיף, ערוך, או הסר ימים מיותרים (🗑). שום דבר לא נכתב ללוח עד שתאשר.</div>
     <div class="grid" style="grid-template-columns:1fr 1fr; margin-bottom:10px">
       <label class="fld">שייך לפרויקט<select id="sch_project" onchange="onSchedProjChange()">${pOpts}</select></label>
       <label class="fld">שייך לחוזה<select id="sch_contract" onchange="_schedContract=this.value">${cOpts}</select></label>
