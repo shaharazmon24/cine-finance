@@ -598,12 +598,12 @@ td[title="לחץ לשינוי סטטוס"]:hover .st{border-color:var(--accent-d
   <div class="modal" style="width:min(940px,96vw)">
     <div class="modal-head">
       <h2 id="schedTitle">שיבוץ אוטומטי מקובץ</h2>
-      <button class="x" onclick="closeModal('schedModal')">×</button>
+      <button class="x" onclick="cancelSchedModal()">×</button>
     </div>
     <div class="modal-body" id="schedBody"></div>
     <div class="modal-foot">
       <button class="btn primary" id="schedConfirmBtn" onclick="confirmSchedule()">הוסף ללוח</button>
-      <button class="btn ghost" onclick="closeModal('schedModal')">ביטול</button>
+      <button class="btn ghost" onclick="cancelSchedModal()">ביטול</button>
     </div>
   </div>
 </div>
@@ -984,10 +984,12 @@ let _schedItems=[];
 function pickScheduleFile(){ document.getElementById('scheduleFile').click(); }
 async function scheduleFromFile(file){
   if(!_schedUpdateMode) go('calendar');
+  // in update mode projModal is hidden (DOM intact) — status goes to pj_genMsg (invisible but safe)
+  // in normal mode use calLegend on the calendar page
   const host=document.getElementById(_schedUpdateMode?'pj_genMsg':'calLegend')||document.getElementById('calLegend');
-  const prev=host.innerHTML;
-  host.style.color='var(--muted)';
-  host.textContent=`⏳ קורא את "${file.name}"…`;
+  const calHost=document.getElementById('calLegend');
+  const prev=calHost?calHost.innerHTML:'';
+  if(!_schedUpdateMode && calHost){ calHost.style.color='var(--muted)'; calHost.textContent=`⏳ קורא את "${file.name}"…`; }
   try{
     if(!settings().apiKey) throw new Error('לא הוגדר מפתח API. עבור להגדרות.');
     const block=await buildContentBlock(file);
@@ -995,14 +997,24 @@ async function scheduleFromFile(file){
     const text=await callClaude(SCHEDULE_SYS,[block,{type:'text',text:'התאריך היום הוא '+today+'. חלץ את ימי הצילום העתידיים כמערך JSON לפי הסכמה.'}],3000);
     const arr=parseJSONArray(text);
     if(!arr) throw new Error('לא הצלחתי לפענח את התשובה כ-JSON.');
-    if(!arr.length){ host.textContent=''; alert('לא נמצאו ימי צילום בקובץ.'); _schedUpdateMode=false; _schedUpdateProjId=null; return; }
+    if(!arr.length){
+      if(_schedUpdateMode){ const pid=_schedUpdateProjId; _schedUpdateMode=false; _schedUpdateProjId=null; openProject(pid); alert('לא נמצאו ימי צילום בקובץ.'); }
+      else { if(calHost) calHost.innerHTML=prev; alert('לא נמצאו ימי צילום בקובץ.'); }
+      return;
+    }
     arr.forEach(it=>{ it.date=normDate(it.date); });
     arr.sort((a,b)=>(a.date||'').localeCompare(b.date||''));
-    host.textContent='';
+    if(!_schedUpdateMode && calHost) calHost.innerHTML=prev;
     openSchedReview(arr);
   }catch(err){
-    host.style.color='var(--bad)'; host.textContent='⚠ '+err.message;
-    _schedUpdateMode=false; _schedUpdateProjId=null;
+    if(_schedUpdateMode){
+      const pid=_schedUpdateProjId; _schedUpdateMode=false; _schedUpdateProjId=null;
+      openProject(pid);
+      const msg=document.getElementById('pj_genMsg');
+      if(msg){ msg.style.color='var(--bad)'; msg.textContent='⚠ שגיאה: '+err.message; }
+    } else {
+      if(calHost){ calHost.style.color='var(--bad)'; calHost.textContent='⚠ '+err.message; }
+    }
   }
 }
 function openSchedReview(items){
@@ -1120,6 +1132,12 @@ function schedFillProduction(i){ // typing a production in one row fills the emp
 }
 function schedApplyProductionAll(val){ schedReadDom(); if(val) _schedItems.forEach(it=>{ if(it._keep) it.production=val; }); renderSchedReview(); }
 function schedRemoveRow(i){ schedReadDom(); _schedItems[i]._keep=false; renderSchedReview(); }
+function cancelSchedModal(){
+  const wasUpdate=_schedUpdateMode, pid=_schedUpdateProjId;
+  closeModal('schedModal');
+  _schedItems=[]; _schedUpdateMode=false; _schedUpdateProjId=null; _schedProj=''; _schedContract=''; _schedRole='';
+  if(wasUpdate && pid) openProject(pid); // restore project modal if we came from it
+}
 function confirmSchedule(){
   schedReadDom();
   const chosen=_schedItems.filter(it=>it._keep && it._on!==false && it.date);
@@ -1147,8 +1165,9 @@ function confirmSchedule(){
     closeModal('schedModal');
     _schedItems=[]; _schedUpdateMode=false; _schedUpdateProjId=null; _schedProj=''; _schedContract=''; _schedRole='';
     refreshView();
-    if(_editingProjId===pid) renderProjDaysEditor(pid);
-    alert(`עודכנו ${updated} תאריכים${created?' · נוצרו '+created+' ימים חדשים':''}.`);
+    openProject(pid); // re-open project modal showing updated days
+    const successMsg=`✓ עודכנו ${updated} תאריכים${created?' · נוצרו '+created+' ימים חדשים':''}.`;
+    setTimeout(()=>{ const msg=document.getElementById('pj_genMsg'); if(msg){ msg.style.color='var(--good)'; msg.textContent=successMsg; } },50);
     return;
   }
 
@@ -1907,6 +1926,7 @@ function shiftProjDays(){
 let _schedUpdateMode=false, _schedUpdateProjId=null;
 function pickSchedUpdateFile(projId){
   _schedUpdateMode=true; _schedUpdateProjId=projId;
+  closeModal('projModal'); // hide only — DOM stays intact, _editingProjId preserved
   document.getElementById('scheduleFile').click();
 }
 
