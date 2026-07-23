@@ -18,6 +18,7 @@
 <!-- pdf.js for client-side page count / fallback text; mammoth for .docx -->
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/mammoth/1.6.0/mammoth.browser.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <!-- Supabase JS — automatic multi-device cloud sync -->
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <!-- pdf-lib — write/stamp signed PDFs (digital signing) -->
@@ -721,7 +722,17 @@ td[title="לחץ לשינוי סטטוס"]:hover .st{border-color:var(--accent-d
 
 <input type="file" id="contractFile" accept="application/pdf,image/*,.docx" style="display:none">
 <input type="file" id="scheduleFile" accept="application/pdf,image/*" style="display:none">
+<input type="file" id="incomeFile" accept="application/pdf,image/*,.xlsx,.xls,.csv" style="display:none">
 <input type="file" id="signFile" accept="application/pdf" style="display:none">
+
+<!-- Historical income (manual add / Morning-import review) modal -->
+<div class="modal-bg" id="incomeModal" style="z-index:60">
+  <div class="modal" style="width:min(560px,100%)">
+    <div class="modal-head"><h2 id="incomeTitle">הכנסה</h2><button class="x" onclick="closeModal('incomeModal')">×</button></div>
+    <div class="modal-body" id="incomeBody"></div>
+    <div class="modal-foot"><button class="btn primary" id="incomeSaveBtn" onclick="incomeSave()">שמור</button><button class="btn ghost" onclick="closeModal('incomeModal')">ביטול</button></div>
+  </div>
+</div>
 
 <script>
 /* ============================================================
@@ -732,12 +743,24 @@ const MODEL = 'claude-sonnet-4-5';
 const API_URL = 'https://api.anthropic.com/v1/messages';
 const LS = {
   settings:'cf_settings', contracts:'cf_contracts',
-  workdays:'cf_workdays', expenses:'cf_expenses', projects:'cf_projects', signer:'cf_signer'
+  workdays:'cf_workdays', expenses:'cf_expenses', projects:'cf_projects', signer:'cf_signer',
+  income:'cf_income'   // historical monthly income summaries (e.g. imported from Morning)
 };
 const PROJECT_COLORS=['#5f9ce8','#5fc88f','#e0b15e','#c98fe8','#e8685f','#5fd0e8','#e88f5f','#9fe85f','#8f9ce8','#e85fb0'];
 const MONTH_NAMES=['ינואר','פברואר','מרץ','אפריל','מאי','יוני','יולי','אוגוסט','ספטמבר','אוקטובר','נובמבר','דצמבר'];
 function monthKey(iso){ const k=normDate(iso); return k?k.slice(0,7):''; }
 function monthName(ym){ if(!ym) return ''; const [y,m]=ym.split('-'); return MONTH_NAMES[(+m)-1]+' '+y; }
+/* ---- historical income (monthly summaries, e.g. imported from Morning) ---- */
+function getIncome(){ return load(LS.income,[]); }
+function setIncome(list){ save(LS.income,list); }
+function historicalIncomeForMonth(ym){ let s=0; for(const e of getIncome()){ if(e.month===ym) s+=(+e.amountExVat||0); } return s; }
+function historicalIncomeForYear(y){ let s=0; for(const e of getIncome()){ if((e.month||'').startsWith(y+'-')) s+=(+e.amountExVat||0); } return s; }
+function upsertIncome(month, amountExVat, source, note){
+  const list=getIncome(); const i=list.findIndex(e=>e.month===month);
+  const rec={ id:(i>=0?list[i].id:uid()), month, amountExVat:+amountExVat||0, source:source||'', note:note||'', createdAt:(i>=0?list[i].createdAt:Date.now()) };
+  if(i>=0) list[i]=rec; else list.push(rec);
+  setIncome(list); return rec;
+}
 // ACT 2023 §13.1 travel by "ring" zone — round-trip ₪ (editable conceptually; verified from the agreement)
 const ACT_TRAVEL_RINGS=[
   ['','— ללא / ידני —',null],
@@ -966,11 +989,18 @@ async function buildContentBlock(file){
   if(name.endsWith('.docx')){
     const buf=await file.arrayBuffer();
     const out=await mammoth.extractRawText({arrayBuffer:buf});
-    return {type:'text', text:'תוכן החוזה (חולץ מ-DOCX):\n\n'+out.value};
+    return {type:'text', text:'תוכן המסמך (חולץ מ-DOCX):\n\n'+out.value};
+  }
+  if(name.endsWith('.xlsx') || name.endsWith('.xls') || name.endsWith('.csv')){
+    const buf=await file.arrayBuffer();
+    const wb=XLSX.read(buf,{type:'array'});
+    let txt='';
+    wb.SheetNames.forEach(sn=>{ txt+='# גיליון: '+sn+'\n'+XLSX.utils.sheet_to_csv(wb.Sheets[sn])+'\n\n'; });
+    return {type:'text', text:'תוכן הקובץ (טבלה):\n\n'+txt};
   }
   // plain text fallback
   const txt=await file.text();
-  return {type:'text', text:'תוכן החוזה:\n\n'+txt};
+  return {type:'text', text:'תוכן המסמך:\n\n'+txt};
 }
 
 /* ---------- Contract schema + extraction prompt ---------- */
@@ -1017,6 +1047,7 @@ let _pendingContract=null;
 function pickContractFile(){ document.getElementById('contractFile').click(); }
 document.getElementById('contractFile').addEventListener('change', e=>{ const f=e.target.files[0]; if(f) learnContract(f); e.target.value=''; });
 document.getElementById('scheduleFile').addEventListener('change', e=>{ const f=e.target.files[0]; if(f) scheduleFromFile(f); e.target.value=''; });
+document.getElementById('incomeFile').addEventListener('change', e=>{ const f=e.target.files[0]; if(f) importIncomeFile(f); e.target.value=''; });
 
 async function learnContract(file){
   go('contracts');
@@ -2326,6 +2357,7 @@ function renderDashboard(){
   const month=workdays.filter(w=>(w.date||'').startsWith(ym) && w.tentative!==true);
   let monthExVat=0, owed=0;
   for(const w of month){ monthExVat+=computePay(w).sub; }
+  monthExVat+=historicalIncomeForMonth(ym);   // include any summary income for the current month
   for(const w of workdays){ if(w.tentative===true) continue; const st=w.status; if(st==='issued'||st==='overdue') owed+=computePay(w).total; }
   const upcoming=workdays.filter(w=>normDate(w.date)>=todayStr).length;
   const taxM=incomeTaxNetAnnual(monthExVat*12)/12, bit=bituachMonthly(monthExVat);
@@ -2404,8 +2436,10 @@ function renderFinance(){
 
   // ---- selected month ----
   const md=all.filter(w=>monthKey(w.date)===ym);
-  let income=0, vat=0, gross=0; const byStatus={unissued:0,issued:0,paid:0,overdue:0};
-  for(const w of md){ const p=computePay(w); income+=p.sub; vat+=p.vat; gross+=p.total; byStatus[w.status||'unissued']=(byStatus[w.status||'unissued']||0)+p.total; }
+  let daysIncome=0, vat=0, gross=0; const byStatus={unissued:0,issued:0,paid:0,overdue:0};
+  for(const w of md){ const p=computePay(w); daysIncome+=p.sub; vat+=p.vat; gross+=p.total; byStatus[w.status||'unissued']=(byStatus[w.status||'unissued']||0)+p.total; }
+  const histM=historicalIncomeForMonth(ym);   // summary income (e.g. imported from Morning)
+  const income=daysIncome+histM;
   const taxM=incomeTaxNetAnnual(income*12)/12, bitM=bituachMonthly(income);
   const takeM=Math.max(0, income-taxM-bitM);
 
@@ -2413,6 +2447,7 @@ function renderFinance(){
   const ytd=all.filter(w=>(w.date||'').startsWith(y+'-'));
   let yIncome=0, yVat=0; const perMonthIncome={};
   for(const w of ytd){ const p=computePay(w); yIncome+=p.sub; yVat+=p.vat; const k=monthKey(w.date); perMonthIncome[k]=(perMonthIncome[k]||0)+p.sub; }
+  for(const e of getIncome()){ if((e.month||'').startsWith(y+'-')){ perMonthIncome[e.month]=(perMonthIncome[e.month]||0)+(+e.amountExVat||0); yIncome+=(+e.amountExVat||0); } }
   let yBit=0; for(const k in perMonthIncome) yBit+=bituachMonthly(perMonthIncome[k]);
   const yTax=incomeTaxNetAnnual(yIncome), yTake=Math.max(0, yIncome-yTax-yBit);
 
@@ -2420,7 +2455,7 @@ function renderFinance(){
   const base=income>0?income:1;
   const segTake=Math.max(0,takeM)/base*100, segTax=taxM/base*100, segBit=bitM/base*100;
 
-  const emptyMonth = md.length===0;
+  const emptyMonth = md.length===0 && histM===0;
   const bar = emptyMonth ? '' : `
     <div class="card fin-card">
       <div class="fin-card-t">לאן הולך הכסף · ${MONTH_NAMES[mo]}</div>
@@ -2465,6 +2500,7 @@ function renderFinance(){
       </div>
       <div class="dash-hero-break">
         <div class="brk"><span>הכנסה לפני מע"מ</span><span class="num">${f(income)}</span></div>
+        ${histM>0?`<div class="brk" style="opacity:.7;font-size:12px"><span>· מתוכם הכנסה היסטורית (Morning)</span><span class="num">${f(histM)}</span></div>`:''}
         <div class="brk minus"><span>− מס הכנסה (הפרשה)</span><span class="num">${f(taxM)}</span></div>
         <div class="brk minus"><span>− ביטוח לאומי + בריאות</span><span class="num">${f(bitM)}</span></div>
         <div class="brk total"><span>נשאר לך</span><span class="num">${f(takeM)}</span></div>
@@ -2485,8 +2521,114 @@ function renderFinance(){
       <div class="stat"><div class="k">נשאר לך מתחילת השנה</div><div class="v good">${f(yTake)}</div></div>
     </div>
 
+    ${finIncomeSectionHtml(y)}
+
     <div class="src" style="margin-top:16px">ההפרשות הן הערכה מדויקת לחיסכון לפי שיעורי ${s.taxYear} (<a onclick="go('settings')" style="cursor:pointer;color:var(--info)">ניתן לכוונון בהגדרות</a>). מס ההכנסה מחושב מדורג על הרווח; כשיתווסף מודול ההוצאות, הן יקטינו את הרווח החייב.</div>`;
 }
+
+/* ---- finance page: historical-income section + Morning import ---- */
+function finIncomeSectionHtml(y){
+  const f=n=>fmtMoney(Math.round(n));
+  const list=getIncome().slice().sort((a,b)=>(b.month||'').localeCompare(a.month||''));
+  const rows = list.length ? list.map(e=>`
+    <div class="pm-row">
+      <div style="flex:1;min-width:0"><div class="pm-name">${monthName(e.month)}</div>
+        <div class="faint" style="font-size:12px">${e.source?esc(e.source):'הזנה ידנית'}${e.note?' · '+esc(e.note):''}</div></div>
+      <div class="num" style="font-weight:600;white-space:nowrap">${f(e.amountExVat)}</div>
+      <button class="btn sm ghost" onclick="openIncomeEntry('${e.id}')">ערוך</button>
+      <button class="btn sm" style="color:var(--bad);border-color:var(--bad)" onclick="deleteIncomeEntry('${e.id}')">מחק</button>
+    </div>`).join('') : '<div class="faint" style="font-size:13px;padding:8px 2px">אין עדיין הכנסה היסטורית. ייבא דוח מ‑Morning או הוסף חודש ידנית — כדי שמספרי המס יהיו מדויקים לשנה, בלי להזין ימים.</div>';
+  return `
+    <div class="dash-sec" style="margin-top:22px">הכנסה היסטורית · Morning</div>
+    <div class="notice" style="margin-bottom:12px">אין צורך להזין ימים ישנים. ייבא דוח הכנסות מ‑Morning (Excel / CSV / PDF) ו‑Claude יסכם את ההכנסה החודשית לפני מע"מ — או הוסף חודש ידנית. הסכומים כאן מזינים את חישובי המס והביטוח הלאומי למעלה.</div>
+    <div class="row" style="gap:10px;margin-bottom:12px;flex-wrap:wrap">
+      <button class="btn primary" onclick="pickIncomeFile()">✦ ייבא מ‑Morning</button>
+      <button class="btn" onclick="openIncomeEntry()">+ הוסף חודש ידנית</button>
+    </div>
+    <div class="pm-list">${rows}</div>`;
+}
+function pickIncomeFile(){ document.getElementById('incomeFile').click(); }
+const INCOME_IMPORT_SYS = `אתה עוזר פיננסי לצלם עצמאי בישראל (עוסק מורשה) שמשתמש ב-Morning (חשבונית ירוקה) להוצאת חשבוניות.
+המשתמש יעלה דוח מ-Morning (טבלת מסמכים/הכנסות — Excel/CSV/PDF/תמונה). סכם את ההכנסה החודשית לפני מע"מ.
+כללים:
+- ספור רק מסמכי הכנסה: חשבונית מס, חשבונית מס/קבלה, קבלה. אל תספור חשבונית עסקה / דרישת תשלום / הצעת מחיר (אינן הכנסה). מסמך זיכוי מפחית.
+- אם מופיע גם סכום לפני מע"מ וגם כולל מע"מ — קח את הסכום לפני מע"מ. אם רק כולל מע"מ מופיע — חלץ לפני מע"מ (חלק ב-1.18).
+- קבץ לפי חודש התאריך של המסמך.
+השב אך ורק ב-JSON תקין: מערך אובייקטים, אחד לכל חודש שיש בו הכנסה:
+[{"month":"YYYY-MM","amountExVat": מספר, "docCount": מספר}]
+אל תמציא נתונים. אם אינך בטוח לגבי חודש — דלג עליו.`;
+async function importIncomeFile(file){
+  go('finance');
+  const root=document.getElementById('finRoot');
+  root.insertAdjacentHTML('afterbegin', `<div class="statusline" id="incStatus"><span class="spin"></span>קורא את הדוח מ‑Morning "${esc(file.name)}" ומסכם הכנסה חודשית…</div>`);
+  try{
+    const block=await buildContentBlock(file);
+    const text=await callClaude(INCOME_IMPORT_SYS,[block,{type:'text',text:'סכם את ההכנסה החודשית לפני מע"מ ל-JSON לפי ההוראות.'}],2500);
+    const arr=parseJSONArray(text);
+    if(!arr || !arr.length) throw new Error('לא זוהתה הכנסה בקובץ. ודא שזה דוח מסמכים/הכנסות מ‑Morning.');
+    openIncomeReview(arr.filter(x=>x&&x.month), file.name);
+  }catch(err){ const s=document.getElementById('incStatus'); if(s){ s.classList.add('err'); s.innerHTML='⚠ '+esc(err.message); } }
+  finally{ const s=document.getElementById('incStatus'); if(s && !s.classList.contains('err')) s.remove(); }
+}
+let _incomeMode='manual', _incomeEditId=null;
+function openIncomeReview(arr, fileName){
+  _incomeMode='review';
+  const f=n=>fmtMoney(Math.round(n));
+  document.getElementById('incomeTitle').textContent='אישור הכנסה מ‑Morning';
+  let total=0; arr.forEach(x=>total+=(+x.amountExVat||0));
+  let html=`<div class="notice" style="margin-bottom:12px">חולץ מ‑<b>${esc(fileName||'')}</b>. בדוק כל חודש, ערוך אם צריך, וסמן מה לשמור. ערך חדש יחליף סכום קיים לאותו חודש.</div><div class="pm-list">`;
+  arr.forEach(x=>{
+    const ex=getIncome().find(e=>e.month===x.month);
+    html+=`<div class="pm-row" style="gap:8px">
+      <input type="checkbox" class="inc-keep" checked style="width:auto">
+      <div style="flex:1"><div class="pm-name">${monthName(x.month)}</div>${ex?`<div class="faint" style="font-size:11.5px">קיים: ${f(ex.amountExVat)} — יוחלף</div>`:(x.docCount?`<div class="faint" style="font-size:11.5px">${x.docCount} מסמכים</div>`:'')}</div>
+      <input type="number" class="inc-amt" data-month="${esc(x.month)}" value="${esc(x.amountExVat)}" style="width:120px;background:var(--bg2);border:1px solid var(--line2);border-radius:8px;padding:7px 9px;color:var(--text)">
+      <span class="faint" style="font-size:12px">₪ לפני מע"מ</span>
+    </div>`;
+  });
+  html+=`</div><div class="row" style="justify-content:space-between;margin-top:12px;font-weight:600"><span>סה"כ</span><span>${f(total)}</span></div>`;
+  document.getElementById('incomeBody').innerHTML=html;
+  document.getElementById('incomeSaveBtn').textContent='שמור הכנסה';
+  openModal('incomeModal');
+}
+function openIncomeEntry(id){
+  _incomeMode='manual';
+  const e = id ? getIncome().find(x=>x.id===id) : null;
+  _incomeEditId = e?e.id:null;
+  document.getElementById('incomeTitle').textContent = e?'עריכת הכנסה חודשית':'הוספת הכנסה חודשית';
+  const nowYm=new Date().toISOString().slice(0,7);
+  document.getElementById('incomeBody').innerHTML=`
+    <div class="grid" style="grid-template-columns:1fr 1fr">
+      <label class="fld">חודש<input type="month" id="inc_month" value="${esc(e?e.month:nowYm)}"></label>
+      <label class="fld">הכנסה לפני מע"מ ₪<input type="number" id="inc_amount" value="${e?esc(e.amountExVat):''}" placeholder="לדוגמה 18500"></label>
+    </div>
+    <label class="fld" style="margin-top:10px">הערה (אופציונלי)<input type="text" id="inc_note" value="${e?esc(e.note||''):''}" placeholder="למשל: סיכום חשבוניות Morning"></label>
+    <div class="faint" style="font-size:12px;margin-top:10px">הזן את סך ההכנסה של החודש לפני מע"מ (מ‑Morning / רואה החשבון). זה מזין את חישוב המס והביטוח הלאומי.</div>`;
+  document.getElementById('incomeSaveBtn').textContent='שמור';
+  openModal('incomeModal');
+}
+function incomeSave(){
+  if(_incomeMode==='review'){
+    let n=0;
+    document.querySelectorAll('#incomeBody .pm-row').forEach(row=>{
+      const keep=row.querySelector('.inc-keep'); if(keep && !keep.checked) return;
+      const el=row.querySelector('.inc-amt'); if(!el) return;
+      const month=el.dataset.month, amt=el.value===''?0:Number(el.value);
+      if(month && amt){ upsertIncome(month, amt, 'Morning', ''); n++; }
+    });
+    closeModal('incomeModal'); renderFinance();
+    return;
+  }
+  const month=document.getElementById('inc_month').value;
+  const amtStr=document.getElementById('inc_amount').value;
+  if(!month){ alert('בחר חודש.'); return; }
+  if(amtStr===''||isNaN(+amtStr)){ alert('הזן סכום.'); return; }
+  const note=document.getElementById('inc_note').value;
+  if(_incomeEditId){ const old=getIncome().find(x=>x.id===_incomeEditId); if(old && old.month!==month) setIncome(getIncome().filter(x=>x.id!==_incomeEditId)); }
+  upsertIncome(month, +amtStr, '', note);
+  closeModal('incomeModal'); renderFinance();
+}
+function deleteIncomeEntry(id){ if(!confirm('למחוק את רשומת ההכנסה?')) return; setIncome(getIncome().filter(e=>e.id!==id)); renderFinance(); }
 
 /* ---------- Modal helpers ---------- */
 function openModal(id){ document.getElementById(id).classList.add('open'); }
