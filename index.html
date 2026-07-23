@@ -264,6 +264,10 @@ td[title="לחץ לשינוי סטטוס"]:hover .st{border-color:var(--accent-d
 .chip{background:var(--panel);border:1px solid var(--line2);color:var(--muted);border-radius:999px;padding:7px 15px;font-size:13px;transition:.12s}
 .chip:hover{border-color:var(--accent-dim);color:var(--text)}
 .chip.on{background:var(--accent);color:#1a1205;border-color:var(--accent);font-weight:600}
+.scope-pill{display:inline-flex;align-items:center;gap:9px;background:rgba(224,177,94,.12);border:1px solid var(--accent-dim);color:var(--accent);border-radius:999px;padding:6px 8px 6px 15px;font-size:13px;flex-basis:100%;order:-1;margin-bottom:2px;width:fit-content}
+.scope-pill b{color:var(--text);font-weight:600}
+.scope-pill button{background:rgba(255,255,255,.06);border:0;color:var(--muted);width:22px;height:22px;border-radius:50%;font-size:12px;line-height:1;cursor:pointer}
+.scope-pill button:hover{color:var(--text);background:rgba(255,255,255,.12)}
 .selbar{display:flex;align-items:center;gap:12px;background:var(--panel2);border:1px solid var(--line2);border-radius:11px;padding:9px 14px;margin-bottom:12px;font-size:14px}
 .viewtog{display:inline-flex;background:var(--panel);border:1px solid var(--line2);border-radius:999px;padding:3px;margin-inline-start:auto}
 .viewtog button{background:transparent;border:0;color:var(--muted);border-radius:999px;padding:5px 14px;font-size:13px}
@@ -1432,6 +1436,10 @@ function renderWorkdays(){
   if(_wdFilter==='confirmed') rows=list.filter(w=>w.tentative!==true);
   else if(_wdFilter==='tentative') rows=list.filter(w=>w.tentative===true);
   else if(_wdFilter==='unpaid') rows=list.filter(w=>w.status!=='paid' && w.tentative!==true);
+  // ---- dashboard drill-downs: show exactly what the clicked tile counted ----
+  else if(_wdFilter==='month'){ const now=new Date(), ym=now.getFullYear()+'-'+String(now.getMonth()+1).padStart(2,'0'); rows=list.filter(w=>(w.date||'').startsWith(ym) && w.tentative!==true); }
+  else if(_wdFilter==='owed') rows=list.filter(w=>(w.status==='issued'||w.status==='overdue') && w.tentative!==true);
+  else if(_wdFilter==='upcoming'){ const today=new Date().toISOString().slice(0,10); rows=list.filter(w=>normDate(w.date)>=today); }
 
   if(!list.length){
     host.innerHTML=`<div class="empty"><div class="big">☰</div>
@@ -1639,6 +1647,7 @@ function cycleMonthStatus(projId, ym){
   renderWorkdays(); if(sc) sc.scrollTop=top;
 }
 
+const WD_DRILL_LABELS={month:'ימי החודש',owed:'ממתין לתשלום · הופק וטרם שולם',upcoming:'ימים מתוכננים · מהיום והלאה'};
 function renderWdFilters(){
   const opts=[['all','הכל'],['confirmed','מאושרים'],['tentative','משוערים'],['unpaid','ממתינים לתשלום']];
   const chips=opts.map(([k,l])=>`<button class="chip ${_wdFilter===k?'on':''}" onclick="setWdFilter('${k}')">${l}</button>`).join('');
@@ -1647,7 +1656,11 @@ function renderWdFilters(){
     <button class="${_wdView==='list'?'on':''}" onclick="setWdView('list')">רשימה</button>
     <button class="${_wdView==='project'?'on':''}" onclick="setWdView('project')">לפי פרויקט</button>
   </div>`;
-  document.getElementById('wdFilters').innerHTML=chips+sort+tog;
+  // when arriving from a dashboard tile, show a labeled, clearable scope pill
+  const scope = WD_DRILL_LABELS[_wdFilter]
+    ? `<div class="scope-pill">מציג: <b>${WD_DRILL_LABELS[_wdFilter]}</b><button onclick="setWdFilter('all')" title="נקה סינון">✕</button></div>`
+    : '';
+  document.getElementById('wdFilters').innerHTML=scope+chips+sort+tog;
 }
 function setWdFilter(k){ _wdFilter=k; renderWorkdays(); }
 function setWdView(v){ _wdView=v; renderWorkdays(); }
@@ -2302,11 +2315,9 @@ function renderDashboard(){
 }
 /* dashboard panels drill down into the matching detail view */
 function dashOpen(kind){
-  if(kind==='take'){ _finRef=new Date(); go('finance'); }   // take-home → dedicated financial breakdown
-  else if(kind==='owed'){ _wdFilter='unpaid'; _wdView='list'; go('workdays'); }
-  else if(kind==='upcoming'){ go('calendar'); }
+  if(kind==='take'){ _finRef=new Date(); go('finance'); }        // take-home → dedicated financial breakdown
   else if(kind==='contracts'){ go('contracts'); }
-  else { _wdFilter='all'; go('workdays'); }   // 'month' → this month's work-day list
+  else { _wdView='list'; _wdFilter=(kind==='month'||kind==='owed'||kind==='upcoming')?kind:'all'; go('workdays'); }
 }
 
 /* ============================================================
