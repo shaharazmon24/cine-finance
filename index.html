@@ -761,6 +761,51 @@ function upsertIncome(month, amountExVat, source, note){
   if(i>=0) list[i]=rec; else list.push(rec);
   setIncome(list); return rec;
 }
+/* ---- annual income projection → effective tax rate (income tax is annual, not monthly) ---- */
+function totalIncomeForYear(y){
+  let s=0; for(const w of load(LS.workdays,[])){ if(w.tentative===true) continue; if((w.date||'').startsWith(y+'-')) s+=computePay(w).sub; }
+  return s + historicalIncomeForYear(y);
+}
+function annualProjection(y){
+  const raw=load(LS.settings,{});
+  const override=(raw.annualEstimateByYear && raw.annualEstimateByYear[y]!=null && raw.annualEstimateByYear[y]!=='')? +raw.annualEstimateByYear[y] : null;
+  const now=new Date(), curY=now.getFullYear(), today=now.toISOString().slice(0,10);
+  // average of the up-to-3 prior years that have data
+  const priors=[]; for(let yy=y-1; yy>=y-3; yy--){ const t=totalIncomeForYear(yy); if(t>0) priors.push(t); }
+  const priorAvg = priors.length ? priors.reduce((a,b)=>a+b,0)/priors.length : 0;
+  let projected, basis, isOverride=false;
+  if(override!=null){ projected=override; basis='הערכה ידנית'; isOverride=true; }
+  else if(y<curY){ projected=totalIncomeForYear(y)||priorAvg; basis='נתוני השנה בפועל'; }
+  else {
+    const monthsElapsed = (y===curY)? (now.getMonth()+1) : 0;
+    let earned=0, planned=0;
+    for(const w of load(LS.workdays,[])){
+      if(!(w.date||'').startsWith(y+'-')) continue;
+      const sub=computePay(w).sub, d=normDate(w.date);
+      if(w.tentative===true){ if(d>today) planned+=sub; }
+      else { if(d>today) planned+=sub; else earned+=sub; }
+    }
+    earned += historicalIncomeForYear(y);
+    const runMonthly = monthsElapsed>0 ? earned/monthsElapsed : 0;
+    const priorMonthly = priorAvg/12;
+    const typicalMonthly = (runMonthly>0 && priorMonthly>0) ? (runMonthly+priorMonthly)/2 : (runMonthly||priorMonthly);
+    const monthsRemaining = Math.max(0, 12-monthsElapsed);
+    const estRemaining = Math.max(planned, monthsRemaining*typicalMonthly);
+    projected = earned + estRemaining;
+    const parts=[]; if(runMonthly>0) parts.push('קצב נוכחי'); if(priorMonthly>0) parts.push('ממוצע '+priors.length+' שנים'); if(planned>0) parts.push('ימים מתוכננים');
+    basis = parts.length ? 'לפי '+parts.join(' + ') : 'אין עדיין מספיק נתונים';
+  }
+  projected=Math.max(0, projected||0);
+  const tax = incomeTaxNetAnnual(projected);
+  return { projected, tax, effRate: projected>0? tax/projected : 0, basis, priorAvg, isOverride };
+}
+function saveAnnualEstimate(y, val){
+  const raw=load(LS.settings,{});
+  const map=Object.assign({}, raw.annualEstimateByYear||{});
+  if(val===''||val==null){ delete map[y]; } else { map[y]=+val; }
+  raw.annualEstimateByYear=map; save(LS.settings,raw);
+  renderFinance();
+}
 // ACT 2023 §13.1 travel by "ring" zone — round-trip ₪ (editable conceptually; verified from the agreement)
 const ACT_TRAVEL_RINGS=[
   ['','— ללא / ידני —',null],
@@ -2360,7 +2405,8 @@ function renderDashboard(){
   monthExVat+=historicalIncomeForMonth(ym);   // include any summary income for the current month
   for(const w of workdays){ if(w.tentative===true) continue; const st=w.status; if(st==='issued'||st==='overdue') owed+=computePay(w).total; }
   const upcoming=workdays.filter(w=>normDate(w.date)>=todayStr).length;
-  const taxM=incomeTaxNetAnnual(monthExVat*12)/12, bit=bituachMonthly(monthExVat);
+  const _proj=annualProjection(now.getFullYear());
+  const taxM=monthExVat*_proj.effRate, bit=bituachMonthly(monthExVat);   // annual effective rate, not month×12
   const take=Math.max(0, monthExVat-taxM-bit);
   const f=n=>fmtMoney(Math.round(n));
 
@@ -2440,7 +2486,10 @@ function renderFinance(){
   for(const w of md){ const p=computePay(w); daysIncome+=p.sub; vat+=p.vat; gross+=p.total; byStatus[w.status||'unissued']=(byStatus[w.status||'unissued']||0)+p.total; }
   const histM=historicalIncomeForMonth(ym);   // summary income (e.g. imported from Morning)
   const income=daysIncome+histM;
-  const taxM=incomeTaxNetAnnual(income*12)/12, bitM=bituachMonthly(income);
+  const proj=annualProjection(y);             // smart annual estimate → effective tax rate
+  const effRate=proj.effRate;
+  const bitM=bituachMonthly(income);
+  const taxM=income*effRate;                  // income tax is annual → smooth via the effective rate, not month×12
   const takeM=Math.max(0, income-taxM-bitM);
 
   // ---- year to date (income earned so far this year) ----
@@ -2480,6 +2529,24 @@ function renderFinance(){
       <div class="stat"><div class="k">טרם הופק</div><div class="v">${f(byStatus.unissued)}</div></div>
     </div>`;
 
+  const projPanel = `
+    <div class="card fin-card" style="margin-top:16px">
+      <div class="row" style="justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:16px">
+        <div>
+          <div class="fin-card-t" style="margin:0 0 4px">שיעור מס אפקטיבי · ${y}</div>
+          <div style="font-size:32px;font-weight:700;color:var(--accent);line-height:1.1">${(effRate*100).toFixed(1)}%</div>
+          <div class="faint" style="font-size:12px;margin-top:4px">${esc(proj.basis)}${proj.isOverride?' · ידני':''} · מס שנתי צפוי ${f(proj.tax)}</div>
+        </div>
+        <div style="min-width:220px;flex:1;max-width:280px">
+          <label class="fld" style="font-size:12px">צפי הכנסה שנתית (לפני מע"מ) — ניתן לעריכה
+            <input type="number" id="fin_annualEst" value="${Math.round(proj.projected)}" onchange="saveAnnualEstimate(${y}, this.value)">
+          </label>
+          ${proj.isOverride?`<button class="btn sm ghost" style="margin-top:8px" onclick="saveAnnualEstimate(${y}, '')">↺ חזרה לחישוב אוטומטי</button>`:''}
+          <div class="faint" style="font-size:11.5px;margin-top:6px">שיעור המס נגזר מהצפי השנתי. ערוך אותו וכל המספרים מתעדכנים.</div>
+        </div>
+      </div>
+    </div>`;
+
   root.innerHTML=`
     <div class="fin-head">
       <div class="cal-nav">
@@ -2496,7 +2563,7 @@ function renderFinance(){
       <div class="dash-hero-main">
         <div class="k">כמה באמת שלך · ${MONTH_NAMES[mo]}</div>
         <div class="big-num">${f(takeM)}</div>
-        <div class="sub">${emptyMonth?'אין הכנסה החודש. הוסף ימי עבודה והמספרים יופיעו כאן.':'מתוך הכנסה של '+f(income)+' לפני מע"מ. השומה הסופית נקבעת בסוף השנה מול רואה החשבון.'}</div>
+        <div class="sub">${emptyMonth?'אין הכנסה החודש. הוסף ימי עבודה והמספרים יופיעו כאן.':'הכנסת '+MONTH_NAMES[mo]+': '+f(income)+' · לפי שיעור מס אפקטיבי '+(effRate*100).toFixed(1)+'% (על צפי שנתי '+f(proj.projected)+'). ביטוח לאומי מחושב חודשי.'}</div>
       </div>
       <div class="dash-hero-break">
         <div class="brk"><span>הכנסה לפני מע"מ</span><span class="num">${f(income)}</span></div>
@@ -2507,18 +2574,21 @@ function renderFinance(){
       </div>
     </div>
 
+    ${emptyMonth?'':projPanel}
+
     ${bar}
 
     <div class="notice" style="margin:16px 0">מע"מ שגבית החודש: <b>${f(vat)}</b> (מתוך ${f(gross)} בחשבוניות). זהו כסף שאינו שלך — אתה מעביר אותו למדינה בדוח המע"מ. לכן הוא לא נכלל ב"כמה באמת שלך".</div>
 
     ${payTiles}
 
-    <div class="dash-sec">מתחילת השנה (${y})</div>
+    <div class="dash-sec">מתחילת השנה (${y}) — מדויק בפועל</div>
+    <div class="notice" style="margin-bottom:12px;font-size:12.5px">כאן המספרים המדויקים לפי כל ההכנסה שכבר נכנסה השנה — מס הכנסה מחושב מדורג על המצטבר (לא לפי שיעור ממוצע). זה המספר ש"מתכנס" לאמת בסוף השנה.</div>
     <div class="stats">
       <div class="stat"><div class="k">הכנסה מצטברת (לפני מע"מ)</div><div class="v">${f(yIncome)}</div></div>
-      <div class="stat"><div class="k">הפרשה למס הכנסה</div><div class="v gold">${f(yTax)}</div></div>
-      <div class="stat"><div class="k">הפרשה לביטוח לאומי</div><div class="v gold">${f(yBit)}</div></div>
-      <div class="stat"><div class="k">נשאר לך מתחילת השנה</div><div class="v good">${f(yTake)}</div></div>
+      <div class="stat"><div class="k">מס הכנסה על המצטבר</div><div class="v gold">${f(yTax)}</div></div>
+      <div class="stat"><div class="k">ביטוח לאומי מצטבר</div><div class="v gold">${f(yBit)}</div></div>
+      <div class="stat"><div class="k">נשאר לך בפועל</div><div class="v good">${f(yTake)}</div></div>
     </div>
 
     ${finIncomeSectionHtml(y)}
