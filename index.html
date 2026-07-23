@@ -263,6 +263,18 @@ td[title="לחץ לשינוי סטטוס"]:hover .st{border-color:var(--accent-d
 .pgroup-head .pchev{color:var(--faint);font-size:16px;transition:transform .18s;display:inline-block;line-height:1;flex-shrink:0}
 .pgroup-head.open .pchev{transform:rotate(90deg)}
 .pgroup table.data th{background:transparent}
+.pmonth{border-top:1px solid var(--line)}
+.pmonth:first-child{border-top:0}
+.pmonth-head{display:flex;align-items:center;gap:12px;flex-wrap:wrap;padding:10px 16px;background:var(--bg2)}
+.pmonth-name{font-weight:600;font-size:13.5px;color:var(--text)}
+.pmonth-meta{font-size:12.5px;color:var(--muted);font-variant-numeric:tabular-nums}
+.pmonth-inv{margin-inline-start:auto;display:flex;align-items:center;gap:7px;font-size:12.5px}
+.pmonth-inv .st{cursor:pointer;transition:transform .1s}
+.pmonth-inv .st:hover{transform:scale(1.04)}
+.pmonth table.data{margin:0}
+.pm-list{display:flex;flex-direction:column;gap:8px}
+.pm-row{display:flex;align-items:center;gap:11px;padding:11px 13px;border:1px solid var(--line);border-radius:11px;background:var(--panel2)}
+.pm-row .pm-name{font-size:14.5px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 /* project inline days editor */
 .pde-shift{display:flex;align-items:center;gap:8px;margin-bottom:10px;padding:8px 12px;background:var(--bg2);border-radius:10px;flex-wrap:wrap}
 .pde-shift input[type=number]{width:72px;background:transparent;border:1px solid var(--line2);border-radius:8px;padding:5px 8px;color:var(--text);font:inherit;font-size:13px;text-align:center}
@@ -282,6 +294,21 @@ td[title="לחץ לשינוי סטטוס"]:hover .st{border-color:var(--accent-d
 .cal-nav{display:inline-flex;gap:4px}
 .cal-nav button{width:34px;height:34px;border-radius:9px;background:var(--panel2);border:1px solid var(--line2);color:var(--text);font-size:16px;display:flex;align-items:center;justify-content:center}
 .cal-nav button:hover{border-color:var(--accent-dim)}
+.cal-title-wrap{position:relative;display:inline-flex}
+.cal-title{cursor:pointer;user-select:none;display:inline-flex;align-items:center;gap:8px;border-radius:9px;padding:2px 8px;transition:background .12s}
+.cal-title:hover{background:var(--panel2)}
+.cal-title::after{content:'▾';font-size:13px;color:var(--faint);font-weight:400}
+.cal-picker{position:absolute;top:calc(100% + 8px);inset-inline-start:0;z-index:30;background:var(--panel);border:1px solid var(--line2);border-radius:14px;padding:12px;box-shadow:0 18px 50px rgba(0,0,0,.5);width:284px;animation:fade .16s ease}
+.calpick-yr{display:flex;align-items:center;justify-content:space-between;margin-bottom:10px}
+.calpick-yr span{font-size:17px;font-weight:700;font-variant-numeric:tabular-nums}
+.calpick-yr button{width:32px;height:32px;border-radius:8px;background:var(--panel2);border:1px solid var(--line2);color:var(--text);font-size:15px}
+.calpick-yr button:hover{border-color:var(--accent-dim)}
+.calpick-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:6px}
+.calpick-m{padding:9px 6px;border-radius:9px;background:var(--panel2);border:1px solid var(--line);color:var(--muted);font-size:13px;transition:.12s}
+.calpick-m:hover{border-color:var(--accent-dim);color:var(--text)}
+.calpick-m.on{background:var(--accent);color:#1a1205;border-color:var(--accent);font-weight:700}
+.calpick-today{width:100%;margin-top:10px;padding:8px;border-radius:9px;background:transparent;border:1px solid var(--line2);color:var(--muted);font-size:13px}
+.calpick-today:hover{color:var(--text);border-color:var(--accent-dim)}
 .calgrid{display:grid;grid-template-columns:repeat(7,1fr);gap:1px;background:var(--line);border:1px solid var(--line);border-radius:16px;overflow:hidden;box-shadow:0 4px 26px rgba(0,0,0,.26)}
 .caldow{background:var(--bg2);color:var(--faint);font-size:11px;font-weight:600;letter-spacing:.5px;text-align:center;padding:11px 0}
 .calcell{background:var(--panel);min-height:108px;padding:7px 7px;display:flex;flex-direction:column;gap:4px;cursor:pointer;transition:background .12s;position:relative}
@@ -356,7 +383,9 @@ td[title="לחץ לשינוי סטטוס"]:hover .st{border-color:var(--accent-d
   [style*="1fr 1fr"]{grid-template-columns:1fr!important}
   /* tighter calendar — force 7 equal columns with no min-content blowout */
   .cal-head{gap:8px}
-  .cal-head h2{font-size:17px;min-width:0;order:1}
+  .cal-head h2{font-size:17px;min-width:0}
+  .cal-title-wrap{order:1}
+  .cal-picker{width:min(280px,86vw)}
   .cal-nav{order:0}
   .cal-head>.btn.sm.ghost{order:2;margin-inline-start:auto}
   .cal-head .spacer{display:none}
@@ -447,10 +476,13 @@ td[title="לחץ לשינוי סטטוס"]:hover .st{border-color:var(--accent-d
       <section class="view" id="view-calendar">
         <div class="cal-head">
           <div class="cal-nav">
-            <button onclick="calMove(1)" title="הבא">‹</button>
-            <button onclick="calMove(-1)" title="הקודם">›</button>
+            <button onclick="calMove(-1)" title="החודש הקודם">›</button>
+            <button onclick="calMove(1)" title="החודש הבא">‹</button>
           </div>
-          <h2 id="calLabel"></h2>
+          <div class="cal-title-wrap">
+            <h2 id="calLabel" class="cal-title" onclick="toggleCalPicker()" title="בחר חודש ושנה"></h2>
+            <div class="cal-picker" id="calPicker" style="display:none"></div>
+          </div>
           <button class="btn sm ghost" onclick="calToday()">היום</button>
           <div class="spacer" style="flex:1"></div>
           <div class="cal-actions">
@@ -593,6 +625,21 @@ td[title="לחץ לשינוי סטטוס"]:hover .st{border-color:var(--accent-d
   </div>
 </div>
 
+<!-- Projects manager modal -->
+<div class="modal-bg" id="projsModal" style="z-index:58">
+  <div class="modal" style="width:min(560px,100%)">
+    <div class="modal-head">
+      <h2>ניהול פרויקטים</h2>
+      <button class="x" onclick="closeModal('projsModal')">×</button>
+    </div>
+    <div class="modal-body" id="projsBody"></div>
+    <div class="modal-foot">
+      <button class="btn primary" onclick="closeModal('projsModal');openProject(null)">+ פרויקט חדש</button>
+      <button class="btn ghost" onclick="closeModal('projsModal')">סגור</button>
+    </div>
+  </div>
+</div>
+
 <!-- Schedule extraction (AI) review modal -->
 <div class="modal-bg" id="schedModal" style="z-index:55">
   <div class="modal" style="width:min(940px,96vw)">
@@ -654,6 +701,9 @@ const LS = {
   workdays:'cf_workdays', expenses:'cf_expenses', projects:'cf_projects', signer:'cf_signer'
 };
 const PROJECT_COLORS=['#5f9ce8','#5fc88f','#e0b15e','#c98fe8','#e8685f','#5fd0e8','#e88f5f','#9fe85f','#8f9ce8','#e85fb0'];
+const MONTH_NAMES=['ינואר','פברואר','מרץ','אפריל','מאי','יוני','יולי','אוגוסט','ספטמבר','אוקטובר','נובמבר','דצמבר'];
+function monthKey(iso){ const k=normDate(iso); return k?k.slice(0,7):''; }
+function monthName(ym){ if(!ym) return ''; const [y,m]=ym.split('-'); return MONTH_NAMES[(+m)-1]+' '+y; }
 // ACT 2023 §13.1 travel by "ring" zone — round-trip ₪ (editable conceptually; verified from the agreement)
 const ACT_TRAVEL_RINGS=[
   ['','— ללא / ידני —',null],
@@ -744,6 +794,7 @@ function renderTopActions(v){
   if(v==='workdays'){
     function mkBtn(cls,txt,fn,title){const b=document.createElement('button');b.className='btn '+cls;b.textContent=txt;if(title)b.title=title;b.onclick=fn;return b;}
     const btns=[
+      mkBtn('','⚙ פרויקטים',openProjectsManager,'נהל / מחק פרויקטים'),
       mkBtn('','+ פרויקט',()=>openProject(),'צור פרויקט רב-ימים'),
       mkBtn('','✦ שבץ מקובץ',pickScheduleFile,'העלה קולשיט/צילום מסך לשיבוץ אוטומטי'),
       mkBtn('primary','+ יום עבודה',()=>openWorkday())
@@ -1336,6 +1387,7 @@ function computePay(wd){
 }
 
 let _wdFilter='all', _wdView='list', _wdSort='asc', _wdSel=new Set();
+let _wdOpenGroups=new Set();   // which project groups are expanded in "by project" view (persists across re-render)
 function renderWorkdays(){
   const list=load(LS.workdays,[]).slice().sort((a,b)=>{
     const da=normDate(a.date), db=normDate(b.date);
@@ -1366,7 +1418,7 @@ function renderWorkdays(){
   host.innerHTML = _wdView==='project' ? wdGroupedHtml(rows) : wdListHtml(rows);
 }
 
-function wdRowHtml(w,{showName=true, sel=false}={}){
+function wdRowHtml(w,{showName=true, sel=false, noStatus=false}={}){
   const p=computePay(w);
   const timeStr=(w.startTime&&w.endTime)?`<div class="faint" style="font-size:11px">${esc(w.startTime)}–${esc(w.endTime)}</div>`:'';
   const hrs=p.worked>0?`${p.worked} ש'${p.otHours>0?` <span class="faint">(+${(+p.otHours).toFixed(1).replace(/\.0$/,'')} ש"נ)</span>`:''}${timeStr}`:(timeStr||'—');
@@ -1380,6 +1432,7 @@ function wdRowHtml(w,{showName=true, sel=false}={}){
     nameCell=`<td>${dot}${name}${cname}</td>`;
   }
   const selCell = sel? `<td onclick="event.stopPropagation()"><input type="checkbox" class="wd-sel" data-id="${w.id}" ${_wdSel.has(w.id)?'checked':''} onclick="wdToggleSel('${w.id}',this.checked)" style="width:auto"></td>` : '';
+  const statusCell = noStatus? '' : `<td onclick="event.stopPropagation();cycleStatus('${w.id}')" style="cursor:pointer" title="לחץ לשינוי סטטוס">${st}</td>`;
   const roleTxt = esc(w.role || dayLabelRole(w) || '—');
   return `<tr onclick="openWorkday('${w.id}')">
     ${selCell}
@@ -1388,7 +1441,7 @@ function wdRowHtml(w,{showName=true, sel=false}={}){
     <td>${roleTxt}</td>
     <td class="num">${hrs}</td>
     <td class="num gross">${fmtMoney(Math.round(p.total))}${p.plusVat?'<span class="faint" style="font-weight:400"> כולל מע"מ</span>':''}</td>
-    <td onclick="event.stopPropagation();cycleStatus('${w.id}')" style="cursor:pointer" title="לחץ לשינוי סטטוס">${st}</td>
+    ${statusCell}
     <td onclick="event.stopPropagation()"><button class="rowdel" title="מחק" onclick="deleteWorkday('${w.id}')">🗑</button></td>
   </tr>`;
 }
@@ -1407,13 +1460,14 @@ function cycleStatus(id){
 
 function isMobile(){ return window.innerWidth<=760; }
 /* compact, tappable work-day card for phone (replaces the wide table) */
-function wdCardHtml(w,{showName=true}={}){
+function wdCardHtml(w,{showName=true, noStatus=false}={}){
   const p=computePay(w);
   const dot=`<span class="cdot" style="background:${w.projectId?projColor(w.projectId):'#6b7280'}"></span>`;
   const role=esc(w.role||dayLabelRole(w)||''), times=(w.startTime&&w.endTime)?` · ${esc(w.startTime)}–${esc(w.endTime)}`:'';
   const hrs=p.worked>0?`${p.worked} ש'${p.otHours>0?` +${(+p.otHours).toFixed(1).replace(/\.0$/,'')} ש"נ`:''}`:'';
   const meta=[role,hrs].filter(Boolean).join(' · ')+times;
   const st=w.tentative?`<span class="st tentative"><span class="d"></span>משוער</span>`:`<span class="st ${w.status||'unissued'}"><span class="d"></span>${statusLabel(w.status||'unissued')}</span>`;
+  const stEl = noStatus? '' : `<span onclick="event.stopPropagation();cycleStatus('${w.id}')" style="cursor:pointer" title="לחץ לשינוי">${st}</span>`;
   const nameLine=showName?`<div class="wd-card-name">${dot} ${esc(dayLabel(w)||'—')}</div>`:'';
   return `<div class="wd-card" onclick="openWorkday('${w.id}')">
     <div class="wd-card-top">
@@ -1425,7 +1479,7 @@ function wdCardHtml(w,{showName=true}={}){
     ${meta.trim()?`<div class="wd-card-meta">${meta}</div>`:''}
     <div class="wd-card-foot">
       <span class="wd-card-gross">${fmtMoney(Math.round(p.total))}${p.plusVat?' <span class="faint">כולל מע"מ</span>':''}</span>
-      <span onclick="event.stopPropagation();cycleStatus('${w.id}')" style="cursor:pointer" title="לחץ לשינוי">${st}</span>
+      ${stEl}
     </div>
   </div>`;
 }
@@ -1478,25 +1532,83 @@ function wdGroupedHtml(rows){
     const title = proj? esc(proj.name||'פרויקט') : 'ללא פרויקט';
     const meta = proj && proj.client? `<span class="pmeta">· ${esc(proj.client)}</span>`:'';
     const editBtn = proj? `<button class="edit" title="הוסף יום לפרויקט" onclick="event.stopPropagation();openWorkday(null,null,'${proj.id}')">+ יום</button><button class="edit" title="ערוך פרויקט" onclick="event.stopPropagation();openProject('${proj.id}')">✎</button>`:'';
-    let body;
-    if(isMobile()){
-      body='<div class="wd-cards" style="padding:12px">'+days.map(w=>wdCardHtml(w,{showName:false})).join('')+'</div>';
-    } else {
-      body='<table class="data"><thead><tr><th>תאריך</th><th>תפקיד</th><th>שעות</th><th>שכר (ברוטו)</th><th>סטטוס</th><th></th></tr></thead><tbody>';
-      for(const w of days) body+=wdRowHtml(w,{showName:false});
-      body+='</tbody></table>';
-    }
+    // project days are invoiced per calendar month; unattached days keep per-day status
+    const body = proj ? projMonthsHtml(k, days) : noProjDaysHtml(days);
+    const open=_wdOpenGroups.has(k);
     html+=`<div class="pgroup" style="border-inline-start:0">
-      <div class="pgroup-head" style="border-inline-start-color:${color}" onclick="const b=this.nextElementSibling;const open=b.style.display!=='none';b.style.display=open?'none':'block';this.classList.toggle('open',!open)">
+      <div class="pgroup-head ${open?'open':''}" style="border-inline-start-color:${color}" onclick="toggleWdGroup('${k}',this)">
         <span class="pchev">›</span>
         <span class="cdot" style="background:${color}"></span>
         <h3>${title}</h3>${meta}${editBtn}
         <div class="psum"><span class="pn">${days.length} ימים${unpaid>0?` · ${fmtMoney(Math.round(unpaid))} פתוח`:''}</span><span class="pg">${fmtMoney(Math.round(gross))}</span></div>
       </div>
-      <div style="display:none">${body}</div>
+      <div class="pgroup-body" style="display:${open?'block':'none'}">${body}</div>
     </div>`;
   }
   return html;
+}
+/* expand/collapse a project group, remembering the state so a re-render keeps it open */
+function toggleWdGroup(k, head){
+  const body=head.nextElementSibling; const open=body.style.display!=='none';
+  body.style.display=open?'none':'block'; head.classList.toggle('open',!open);
+  if(open) _wdOpenGroups.delete(k); else _wdOpenGroups.add(k);
+}
+/* days of one project, split into monthly invoices — one invoice status per month */
+function projMonthsHtml(projId, days){
+  const byM=new Map();
+  for(const w of days){ const ym=monthKey(w.date); if(!byM.has(ym)) byM.set(ym,[]); byM.get(ym).push(w); }
+  const yms=[...byM.keys()].sort((a,b)=>b.localeCompare(a)); // most recent month first
+  let html='';
+  for(const ym of yms){
+    const md=byM.get(ym);
+    let mg=0; for(const w of md){ const p=computePay(w); if(w.tentative!==true) mg+=p.total; }
+    const nonT=md.filter(w=>w.tentative!==true);
+    let pill;
+    if(!nonT.length){ pill=`<span class="st tentative"><span class="d"></span>משוער</span>`; }
+    else { const st=monthStatus(nonT);
+      pill=`<span class="st ${st}" onclick="event.stopPropagation();cycleMonthStatus('${projId}','${ym}')" style="cursor:pointer" title="סטטוס חשבונית לחודש — לחץ לשינוי (חל על כל ימי החודש)"><span class="d"></span>${statusLabel(st)}</span>`; }
+    let table;
+    if(isMobile()){
+      table='<div class="wd-cards" style="padding:10px 12px">'+md.map(w=>wdCardHtml(w,{showName:false,noStatus:true})).join('')+'</div>';
+    } else {
+      table='<table class="data"><thead><tr><th>תאריך</th><th>תפקיד</th><th>שעות</th><th>שכר (ברוטו)</th><th></th></tr></thead><tbody>'
+        + md.map(w=>wdRowHtml(w,{showName:false,noStatus:true})).join('') + '</tbody></table>';
+    }
+    html+=`<div class="pmonth">
+      <div class="pmonth-head">
+        <span class="pmonth-name">${monthName(ym)}</span>
+        <span class="pmonth-meta">${md.length} ימים · ${fmtMoney(Math.round(mg))}</span>
+        <span class="pmonth-inv"><span class="faint">חשבונית חודשית:</span> ${pill}</span>
+      </div>
+      ${table}</div>`;
+  }
+  return html;
+}
+/* unattached ("no project") days — per-day status, as before */
+function noProjDaysHtml(days){
+  if(isMobile()) return '<div class="wd-cards" style="padding:10px 12px">'+days.map(w=>wdCardHtml(w,{showName:false})).join('')+'</div>';
+  let b='<table class="data"><thead><tr><th>תאריך</th><th>תפקיד</th><th>שעות</th><th>שכר (ברוטו)</th><th>סטטוס</th><th></th></tr></thead><tbody>';
+  for(const w of days) b+=wdRowHtml(w,{showName:false});
+  return b+'</tbody></table>';
+}
+/* the shared status of a month's days (uniform after any month-level change) */
+function monthStatus(nonTentativeDays){
+  const set=new Set(nonTentativeDays.map(w=>w.status||'unissued'));
+  if(set.size===1) return [...set][0];
+  for(const s of ['unissued','issued','overdue','paid']) if(set.has(s)) return s; // least-advanced wins when mixed
+  return 'unissued';
+}
+/* advance the whole month's invoice status in one click */
+function cycleMonthStatus(projId, ym){
+  const list=load(LS.workdays,[]);
+  const match=list.filter(w=>(w.projectId||'')===projId && monthKey(w.date)===ym && w.tentative!==true);
+  if(!match.length) return;
+  const order=['unissued','issued','paid','overdue'];
+  const next=order[(order.indexOf(monthStatus(match))+1)%order.length];
+  match.forEach(w=>{ w.status=next; });
+  save(LS.workdays,list);
+  const sc=document.querySelector('.content'); const top=sc?sc.scrollTop:0;
+  renderWorkdays(); if(sc) sc.scrollTop=top;
 }
 
 function renderWdFilters(){
@@ -1570,6 +1682,14 @@ function openWorkday(id, presetDate, presetProjectId){
     <div class="grid" style="grid-template-columns:1fr 1fr">
       <label class="fld">תאריך<input type="date" id="wd_date" value="${esc(w.date||'')}"></label>
       <label class="fld">פרויקט<select id="wd_project" onchange="onWdProjectChange()">${pOpts}</select></label>
+      <div id="wd_newProjRow" class="notice" style="display:none;grid-column:1/-1">
+        <div class="row" style="gap:8px;flex-wrap:wrap">
+          <input type="text" id="wd_newProjName" placeholder="שם הפרויקט (למשל: המרוץ למיליון עונה 3)" onkeydown="if(event.key==='Enter'){event.preventDefault();quickCreateProject();}" style="flex:1;min-width:180px;background:var(--bg2);border:1px solid var(--line2);border-radius:9px;padding:9px 12px;color:var(--text);font-size:14px">
+          <button type="button" class="btn sm primary" onclick="quickCreateProject()">צור פרויקט</button>
+          <button type="button" class="btn sm ghost" onclick="openProject(null,true)" title="פתח פרויקט עם חוזה, צבע ופרטים">פרטים מלאים…</button>
+        </div>
+        <div class="faint" style="font-size:11.5px;margin-top:6px">פרויקט יכול להיות גם יום בודד, וגם בלי חוזה. אפשר להוסיף חוזה/תעריף בכל רגע אחר כך.</div>
+      </div>
       <label class="fld">חוזה מקושר<select id="wd_contract" onchange="onWdContractChange()">${cOpts}</select></label>
       <label class="fld">תפקיד<input type="text" id="wd_role" value="${esc(w.role||'')}" placeholder="${_effRole?esc(_effRole)+' (מהחוזה)':'צלם / מפעיל...'}"></label>
       <label class="fld">לקוח / הפקה (אם שונה)<input type="text" id="wd_client" value="${esc(w.client||'')}" placeholder="${_effClient?esc(_effClient)+' (מהפרויקט)':'ברירת מחדל מהפרויקט'}"></label>
@@ -1598,7 +1718,13 @@ function openWorkday(id, presetDate, presetProjectId){
 let _prevProjSel='';
 function onWdProjectChange(){
   const sel=document.getElementById('wd_project');
-  if(sel.value==='__new'){ sel.value=_prevProjSel; openProject(null, true); return; }
+  const row=document.getElementById('wd_newProjRow');
+  if(sel.value==='__new'){
+    sel.value=_prevProjSel;
+    if(row){ row.style.display='block'; const i=document.getElementById('wd_newProjName'); if(i){ i.value=''; setTimeout(()=>i.focus(),0); } }
+    return;
+  }
+  if(row) row.style.display='none';
   _prevProjSel=sel.value;
   const p=sel.value?projectById(sel.value):null;
   if(p){
@@ -1944,6 +2070,45 @@ function deleteProject(id){
   renderWorkdays();
 }
 function closeProjModal(){ closeModal('projModal'); _editingProjId=null; _projReturnToWd=false; _projReturnToSched=false; }
+/* ---- projects manager: list ALL projects (even empty ones) with edit/delete ---- */
+function openProjectsManager(){ renderProjectsManager(); openModal('projsModal'); }
+function renderProjectsManager(){
+  const projects=load(LS.projects,[]).slice().sort((a,b)=>(a.name||'').localeCompare(b.name||'','he'));
+  const wds=load(LS.workdays,[]);
+  const cnt={}; wds.forEach(w=>{ if(w.projectId) cnt[w.projectId]=(cnt[w.projectId]||0)+1; });
+  const body=document.getElementById('projsBody');
+  if(!projects.length){ body.innerHTML='<div class="empty" style="padding:34px 10px"><div>אין עדיין פרויקטים.</div></div>'; return; }
+  body.innerHTML='<div class="pm-list">'+projects.map(p=>`
+    <div class="pm-row">
+      <span class="cdot" style="background:${p.color||'#6b7280'}"></span>
+      <div style="flex:1;min-width:0">
+        <div class="pm-name">${esc(p.name||'פרויקט')}</div>
+        <div class="faint" style="font-size:12px">${cnt[p.id]||0} ימים${p.client?' · '+esc(p.client):''}</div>
+      </div>
+      <button class="btn sm ghost" onclick="closeModal('projsModal');openProject('${p.id}')">ערוך</button>
+      <button class="btn sm" style="color:var(--bad);border-color:var(--bad)" onclick="deleteProjectFromManager('${p.id}')">מחק</button>
+    </div>`).join('')+'</div>';
+}
+function deleteProjectFromManager(id){
+  const used=load(LS.workdays,[]).filter(w=>w.projectId===id).length;
+  const p=projectById(id);
+  const msg=used? `לפרויקט "${(p&&p.name)||''}" מקושרים ${used} ימי עבודה. הימים יישארו אך ינותקו מהפרויקט. למחוק?` : `למחוק את הפרויקט "${(p&&p.name)||''}"?`;
+  if(!confirm(msg)) return;
+  save(LS.projects, load(LS.projects,[]).filter(x=>x.id!==id));
+  const wds=load(LS.workdays,[]); let ch=false; wds.forEach(w=>{ if(w.projectId===id){ w.projectId=null; ch=true; } }); if(ch) save(LS.workdays,wds);
+  renderProjectsManager(); refreshView();
+}
+/* create a lightweight project (name only) straight from the work-day modal */
+function quickCreateProject(){
+  const inp=document.getElementById('wd_newProjName'); if(!inp) return;
+  const name=inp.value.trim();
+  if(!name){ alert('הזן שם פרויקט.'); inp.focus(); return; }
+  const list=load(LS.projects,[]);
+  const d={ id:uid(), name, color:nextProjColor(), createdAt:Date.now() };
+  list.push(d); save(LS.projects,list);
+  const row=document.getElementById('wd_newProjRow'); if(row) row.style.display='none';
+  refreshWdProjectOptions(d.id);   // selects the new project + refreshes the inherited-terms preview
+}
 /* rebuild the project <select> in the workday modal after creating one inline */
 function refreshWdProjectOptions(selectId){
   const sel=document.getElementById('wd_project'); if(!sel) return;
@@ -1999,6 +2164,32 @@ function renderCalendar(){
 }
 function calMove(dir){ _calRef=new Date(_calRef.getFullYear(), _calRef.getMonth()+dir, 1); renderCalendar(); }
 function calToday(){ _calRef=new Date(); renderCalendar(); }
+/* ---- month / year quick-jump picker ---- */
+let _calPickerYear=null;
+function toggleCalPicker(){
+  const el=document.getElementById('calPicker'); if(!el) return;
+  if(el.style.display==='none'){ _calPickerYear=_calRef.getFullYear(); renderCalPicker(); el.style.display='block';
+    setTimeout(()=>document.addEventListener('click',calPickerOutside),0);
+  } else closeCalPicker();
+}
+function closeCalPicker(){ const el=document.getElementById('calPicker'); if(el) el.style.display='none'; document.removeEventListener('click',calPickerOutside); }
+function calPickerOutside(e){ if(!e.target.closest('.cal-title-wrap')) closeCalPicker(); }
+function renderCalPicker(){
+  const el=document.getElementById('calPicker'); if(!el) return;
+  const cy=_calRef.getFullYear(), cm=_calRef.getMonth();
+  const months=MONTH_NAMES.map((n,i)=>`<button class="calpick-m ${(_calPickerYear===cy&&i===cm)?'on':''}" onclick="calGo(${_calPickerYear},${i})">${n}</button>`).join('');
+  el.innerHTML=`
+    <div class="calpick-yr">
+      <button onclick="event.stopPropagation();calPickYr(-1)" title="שנה קודמת">›</button>
+      <span>${_calPickerYear}</span>
+      <button onclick="event.stopPropagation();calPickYr(1)" title="שנה הבאה">‹</button>
+    </div>
+    <div class="calpick-grid">${months}</div>
+    <button class="calpick-today" onclick="calGoToday()">קפוץ להיום</button>`;
+}
+function calPickYr(d){ _calPickerYear+=d; renderCalPicker(); }
+function calGo(y,m){ _calRef=new Date(y,m,1); closeCalPicker(); renderCalendar(); }
+function calGoToday(){ _calRef=new Date(); closeCalPicker(); renderCalendar(); }
 
 /* ---------- Dashboard ---------- */
 function renderDashboard(){
