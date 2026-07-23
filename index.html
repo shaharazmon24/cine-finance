@@ -149,6 +149,12 @@ label.fld input:focus,label.fld select:focus,label.fld textarea:focus{outline:no
 .stat .v.gold{color:var(--accent)}
 .stat .v.good{color:var(--good)}
 .stat small{color:var(--faint);font-size:12px;font-weight:400;display:block;margin-top:6px;line-height:1.45}
+.stat.clickable{cursor:pointer;position:relative}
+.stat.clickable:hover{border-color:var(--accent-dim)}
+.stat .stat-go{position:absolute;top:14px;inset-inline-start:14px;color:var(--faint);font-size:17px;opacity:0;transform:translateX(4px);transition:.15s}
+.stat.clickable:hover .stat-go{opacity:1;transform:translateX(0);color:var(--accent)}
+.dash-hero-main.clickable{cursor:pointer;transition:background .15s}
+.dash-hero-main.clickable:hover{background:rgba(224,177,94,.05)}
 /* dashboard hero — the "how much is actually mine" panel */
 .dash-hero{display:grid;grid-template-columns:1.05fr 1fr;background:
   radial-gradient(120% 140% at 100% 0%, rgba(224,177,94,.10), transparent 55%), linear-gradient(140deg,var(--panel2),var(--panel));
@@ -1681,7 +1687,12 @@ function openWorkday(id, presetDate, presetProjectId){
     ${inheritBanner}
     <div class="grid" style="grid-template-columns:1fr 1fr">
       <label class="fld">תאריך<input type="date" id="wd_date" value="${esc(w.date||'')}"></label>
-      <label class="fld">פרויקט<select id="wd_project" onchange="onWdProjectChange()">${pOpts}</select></label>
+      <label class="fld">פרויקט
+        <div class="row" style="gap:6px">
+          <select id="wd_project" onchange="onWdProjectChange()" style="flex:1">${pOpts}</select>
+          <button type="button" class="btn sm" onclick="showNewProjRow()" title="צור פרויקט חדש ותן לו שם" style="white-space:nowrap">+ חדש</button>
+        </div>
+      </label>
       <div id="wd_newProjRow" class="notice" style="display:none;grid-column:1/-1">
         <div class="row" style="gap:8px;flex-wrap:wrap">
           <input type="text" id="wd_newProjName" placeholder="שם הפרויקט (למשל: המרוץ למיליון עונה 3)" onkeydown="if(event.key==='Enter'){event.preventDefault();quickCreateProject();}" style="flex:1;min-width:180px;background:var(--bg2);border:1px solid var(--line2);border-radius:9px;padding:9px 12px;color:var(--text);font-size:14px">
@@ -2098,6 +2109,12 @@ function deleteProjectFromManager(id){
   const wds=load(LS.workdays,[]); let ch=false; wds.forEach(w=>{ if(w.projectId===id){ w.projectId=null; ch=true; } }); if(ch) save(LS.workdays,wds);
   renderProjectsManager(); refreshView();
 }
+/* reveal the inline "name a new project" field (from the + חדש button) */
+function showNewProjRow(){
+  const r=document.getElementById('wd_newProjRow'); if(!r) return;
+  r.style.display='block';
+  const i=document.getElementById('wd_newProjName'); if(i){ i.value=''; setTimeout(()=>i.focus(),0); }
+}
 /* create a lightweight project (name only) straight from the work-day modal */
 function quickCreateProject(){
   const inp=document.getElementById('wd_newProjName'); if(!inp) return;
@@ -2236,15 +2253,15 @@ function renderDashboard(){
     : `<div class="dash-hero-break"><div class="muted" style="font-size:13px;line-height:1.7">עדיין אין הכנסה החודש. הוסף יום עבודה והמספרים יתחילו לזוז.</div></div>`;
 
   const tiles=[
-    ['ימי עבודה החודש', month.length, ''],
-    ['ממתין לתשלום', f(owed), 'הופק וטרם שולם', owed>0?'gold':''],
-    ['ימים מתוכננים', upcoming, 'מהיום והלאה'],
-    ['חוזים · פרויקטים', contracts.length+' · '+projects.length, ''],
+    ['ימי עבודה החודש', month.length, '', '', 'month'],
+    ['ממתין לתשלום', f(owed), 'הופק וטרם שולם', owed>0?'gold':'', 'owed'],
+    ['ימים מתוכננים', upcoming, 'מהיום והלאה', '', 'upcoming'],
+    ['חוזים · פרויקטים', contracts.length+' · '+projects.length, '', '', 'contracts'],
   ];
 
   root.innerHTML=`
     <div class="dash-hero">
-      <div class="dash-hero-main">
+      <div class="dash-hero-main clickable" onclick="dashOpen('take')" title="פירוט ימי העבודה וההכנסה החודש">
         <div class="k">כמה באמת שלך · ${monthNames[now.getMonth()]}</div>
         <div class="big-num">${f(take)}</div>
         <div class="sub">אחרי מס הכנסה מדורג + ביטוח לאומי · שיעורי ${s.taxYear}. מע"מ נגבה בנפרד ומועבר למדינה — אינו שלך.</div>
@@ -2252,14 +2269,21 @@ function renderDashboard(){
       ${heroBreak}
     </div>
     <div class="dash-sec">החודש במבט מהיר</div>
-    <div class="stats">${tiles.map(([k,v,sub,cls])=>
-      `<div class="stat"><div class="k">${k}</div><div class="v ${cls||''}">${v}</div>${sub?`<small>${sub}</small>`:''}</div>`).join('')}</div>
+    <div class="stats">${tiles.map(([k,v,sub,cls,kind])=>
+      `<div class="stat clickable" onclick="dashOpen('${kind}')"><div class="k">${k}</div><div class="v ${cls||''}">${v}</div>${sub?`<small>${sub}</small>`:''}<span class="stat-go">›</span></div>`).join('')}</div>
     <div class="dash-quick">
       <button class="btn primary" onclick="openWorkday()">+ יום עבודה</button>
       <button class="btn" onclick="go('calendar')">לוח שנה</button>
       <button class="btn" onclick="pickScheduleFile()">✦ שבץ מקובץ</button>
       <button class="btn" onclick="go('sign')">✍ חתום על חוזה</button>
     </div>`;
+}
+/* dashboard panels drill down into the matching detail view */
+function dashOpen(kind){
+  if(kind==='owed'){ _wdFilter='unpaid'; _wdView='list'; go('workdays'); }
+  else if(kind==='upcoming'){ go('calendar'); }
+  else if(kind==='contracts'){ go('contracts'); }
+  else { _wdFilter='all'; go('workdays'); }   // 'month' + 'take' → this month's work-day detail
 }
 
 /* ---------- Modal helpers ---------- */
