@@ -307,6 +307,9 @@ td[title="לחץ לשינוי סטטוס"]:hover .st{border-color:var(--accent-d
 .pde-row{display:grid;grid-template-columns:1fr auto auto;align-items:center;gap:8px;padding:6px 0;border-bottom:1px solid var(--line)}
 .pde-row:last-child{border-bottom:0}
 .pde-date{background:var(--bg2);border:1px solid var(--line2);border-radius:8px;padding:6px 8px;color:var(--text);font:inherit;font-size:13px;width:100%}
+.pde-add{display:flex;gap:8px;align-items:center;margin-top:10px}
+.pde-add input[type=date]{flex:1;background:var(--bg2);border:1px solid var(--line2);border-radius:8px;padding:8px 10px;color:var(--text);font:inherit;font-size:14px}
+.pde-add button{white-space:nowrap}
 .pde-date:focus{border-color:var(--accent);outline:0}
 .pde-st{font-size:11px;white-space:nowrap;padding:2px 7px;border-radius:999px;font-weight:500}
 .pde-del{background:transparent;border:0;color:var(--faint);width:26px;height:26px;border-radius:6px;display:flex;align-items:center;justify-content:center;font-size:16px;cursor:pointer;flex-shrink:0}
@@ -993,10 +996,13 @@ const EXTRACT_SYS = `אתה עוזר משפטי-פיננסי לצלם קולנו
  "dayRate": מספר או null (התעריף היומי בש\\"ח, בלי מע\\"מ; אם כתוב 'בתוספת מע\\"מ' ציין plusVat),
  "plusVat": true/false (האם התעריף הוא לפני מע\\"מ),
  "currency": "₪ כברירת מחדל",
- "baseDayHours": מספר או null (אורך יום העבודה הרגיל בשעות ברוטו),
+ "baseDayHours": מספר או null (אורך יום צילום סטנדרטי בשעות לפי החוזה — למשל 10 / 11 / 11.5 / 12. קריטי לחישוב שעות נוספות),
  "baseDayHoursFriEve": מספר או null (אורך יום בשישי/ערב חג),
+ "overtimeModel": "act | flat | none — 'act' רק אם זהו חוזה אקט תקני עם מדרגות השעות הנוספות של אקט. 'flat' אם כל שעה נוספת משולמת כמכפיל קבוע מהתעריף השעתי (הנפוץ בחוזים פרטיים). 'none' אם אין תוספת עבור שעות נוספות. בחוזה שאינו אקט — כמעט תמיד flat.",
+ "overtimeMultiplier": מספר או null (למודל flat — המכפיל לשעה נוספת. אם כתוב 'שעה נוספת = 100% משעה' → 1.0 ; '125%' → 1.25 ; '150%' → 1.5),
+ "totalContractDays": מספר או null (סה"כ ימי הצילום שהחוזה מדבר עליהם, אם מצוין — למשל 42),
  "paymentTerms": "תנאי התשלום, למשל שוטף+30",
- "overtimeRules": "תיאור כללי שעות נוספות כפי שמופיע",
+ "overtimeRules": "תיאור מילולי של כללי שעות נוספות כפי שמופיע בחוזה",
  "invoiceFlow": "סדר הוצאת החשבוניות (חשבונית עסקה לפני / חשבונית מס אחרי וכו')",
  "travelRules": "כללי נסיעה/זמן נסיעה אם מופיעים",
  "mealRules": "כללי הסעדה/הפסקות אם מופיעים",
@@ -1283,7 +1289,8 @@ function openReview(data){
     ['project','שם ההפקה/פרויקט','text'],['role','תפקיד','text'],
     ['dayRate','תעריף יומי','number'],['currency','מטבע','text'],
     ['baseDayHours','שעות יום בסיס (חול)','number'],['baseDayHoursFriEve','שעות (שישי/ערב חג)','number'],
-    ['paymentTerms','תנאי תשלום','text'],['relationship','סוג ההתקשרות','text'],
+    ['paymentTerms','תנאי תשלום','text'],['totalContractDays','סה"כ ימי החוזה','number'],
+    ['relationship','סוג ההתקשרות','text'],
   ];
   let html='<div class="grid" style="grid-template-columns:1fr 1fr">';
   for(const [k,lbl,t] of fields){
@@ -1292,6 +1299,24 @@ function openReview(data){
   }
   html+='</div>';
   html+=`<label class="fld" style="margin-top:12px"><span class="row" style="gap:8px"><input type="checkbox" data-k="plusVat" ${data.plusVat?'checked':''} style="width:auto"> התעריף הוא לפני מע"מ (יתווסף מע"מ ${settings().vat}%)</span></label>`;
+  const otmVal = data.overtimeModel || (String(data.type||'').includes('ACT')?'act':'flat');
+  const otMultVal = data.overtimeMultiplier!=null?data.overtimeMultiplier:1;
+  html+=`<div class="notice" style="margin-top:12px">
+    <div style="font-weight:600;margin-bottom:8px">חישוב שעות נוספות</div>
+    <div class="grid" style="grid-template-columns:1fr 1fr">
+      <label class="fld">מודל שעות נוספות
+        <select data-k="overtimeModel" onchange="reviewOtToggle()">
+          <option value="flat" ${otmVal==='flat'?'selected':''}>מכפיל אחיד לכל שעה נוספת</option>
+          <option value="act" ${otmVal==='act'?'selected':''}>מדרגות אקט 2023</option>
+          <option value="none" ${otmVal==='none'?'selected':''}>ללא תוספת ש"נ</option>
+        </select>
+      </label>
+      <label class="fld" id="reviewOtMultWrap" style="${otmVal==='flat'?'':'display:none'}">מכפיל לשעה נוספת (×)
+        <input data-k="overtimeMultiplier" type="number" step="0.05" value="${esc(otMultVal)}">
+      </label>
+    </div>
+    <div class="faint" style="font-size:11.5px;margin-top:6px">מכפיל 1.0 = כל שעה נוספת שווה 100% מהתעריף השעתי (תעריף יומי ÷ שעות יום בסיס). "אקט" = מדרגות אוטומטיות של הסכם אקט 2023. יום הבסיס נלקח מ"שעות יום בסיס (חול)" למעלה.</div>
+  </div>`;
   for(const [k,lbl] of [['overtimeRules','כללי שעות נוספות'],['invoiceFlow','זרימת חשבוניות'],['travelRules','כללי נסיעות'],['mealRules','כללי הסעדה'],['notes','הערות']]){
     const v=data[k]==null?'':data[k];
     html+=`<label class="fld" style="margin-top:10px">${lbl}<textarea data-k="${k}" rows="2">${esc(v)}</textarea></label>`;
@@ -1299,6 +1324,11 @@ function openReview(data){
   html+=`<p class="faint" style="font-size:12px;margin-top:14px">חולץ מתוך: ${esc(data.sourceFile||'—')}. בדוק את הנתונים, ערוך מה שצריך, ושמור.</p>`;
   document.getElementById('reviewBody').innerHTML=html;
   openModal('reviewModal');
+}
+function reviewOtToggle(){
+  const sel=document.querySelector('#reviewBody [data-k="overtimeModel"]');
+  const wrap=document.getElementById('reviewOtMultWrap');
+  if(sel&&wrap) wrap.style.display = sel.value==='flat'?'':'none';
 }
 function saveReviewedContract(){
   const d=Object.assign({},_pendingContract);
@@ -1388,6 +1418,17 @@ function dayLabel(w){
   const c=resolveContract(w); return (c&&c.project)||'';
 }
 
+/* Which overtime model applies to a day — driven by ITS contract, not a global assumption.
+   'act'  = ACT 2023 banded overtime (only for real ACT union contracts)
+   'flat' = each overtime hour = hourly rate × a fixed multiplier (default 1.0 = 100%)
+   'none' = no overtime premium */
+function otModelOf(c){
+  if(c && c.overtimeModel) return c.overtimeModel;
+  if(c && String(c.type||'').includes('ACT')) return 'act';   // legacy: ACT contracts keep ACT bands
+  return 'flat';                                              // non-ACT contract / ad-hoc day → simple flat
+}
+function otMultOf(c){ return (c && c.overtimeMultiplier!=null && c.overtimeMultiplier!=='') ? +c.overtimeMultiplier : 1; }
+
 /* Core pay calculator → returns a full breakdown */
 function computePay(wd){
   const s=settings();
@@ -1398,21 +1439,28 @@ function computePay(wd){
   const hourly = baseHours>0?rate/baseHours:0;
   const worked = +wd.hoursWorked||0;
   const otHours = Math.max(0, worked-baseHours);
-  // ACT 2023 §5 overtime bands (weekday, first-occurrence): base→12h ×1.5, 12→13h ×2.0,
-  // beyond 13h +0.5/hr. Integrated in quarter-hour steps (§5.8). Friday/Shabbat/night and the
-  // per-recurrence escalation are project-specific → adjust via the day's fields if needed.
-  const otTo12=+s.otTo12||1.5, ot12to13=+s.ot12to13||2.0, otStep=+s.otBeyond13Step||0.5;
+  const otModel = otModelOf(c), otMult = otMultOf(c);
   let otPay=0;
-  for(let t=baseHours; t<worked-1e-9; t+=0.25){
-    const seg=Math.min(0.25, worked-t);
-    const m = t<12?otTo12 : (t<13?ot12to13 : ot12to13 + otStep*(Math.floor(t-13)+1));
-    otPay += seg*hourly*m;
+  if(otHours>0 && worked>0){
+    if(otModel==='act'){
+      // ACT 2023 §5 bands (weekday, first-occurrence): base→12h ×1.5, 12→13h ×2.0, beyond 13h +0.5/hr,
+      // integrated in quarter-hour steps (§5.8).
+      const otTo12=+s.otTo12||1.5, ot12to13=+s.ot12to13||2.0, otStep=+s.otBeyond13Step||0.5;
+      for(let t=baseHours; t<worked-1e-9; t+=0.25){
+        const seg=Math.min(0.25, worked-t);
+        const m = t<12?otTo12 : (t<13?ot12to13 : ot12to13 + otStep*(Math.floor(t-13)+1));
+        otPay += seg*hourly*m;
+      }
+    } else if(otModel==='flat'){
+      // each overtime hour = hourly × multiplier (e.g. ×1.0 = 100% of an hour's value)
+      otPay = otHours*hourly*otMult;
+    } // 'none' → otPay stays 0
   }
   const gear=+wd.gearRental||0, travel=+wd.travel||0, other=+wd.otherAdd||0;
   const sub = rate + otPay + gear + travel + other;
   const vat = plusVat? sub*((+s.vat||0)/100) : 0;
   return {
-    rate, plusVat, baseHours, hourly, worked, otHours,
+    rate, plusVat, baseHours, hourly, worked, otHours, otModel, otMult,
     otPay, gear, travel, other, sub, vat, total:sub+vat,
     contractName: c?c.name:null
   };
@@ -1570,13 +1618,15 @@ function wdGroupedHtml(rows){
     const editBtn = proj? `<button class="edit" title="הוסף יום לפרויקט" onclick="event.stopPropagation();openWorkday(null,null,'${proj.id}')">+ יום</button><button class="edit" title="ערוך פרויקט" onclick="event.stopPropagation();openProject('${proj.id}')">✎</button>`:'';
     // project days are invoiced per calendar month; unattached days keep per-day status
     const body = proj ? projMonthsHtml(k, days) : noProjDaysHtml(days);
+    const pc = proj && proj.contractId ? contractById(proj.contractId) : null;
+    const totalDays = pc && pc.totalContractDays ? +pc.totalContractDays : null;
     const open=_wdOpenGroups.has(k);
     html+=`<div class="pgroup" style="border-inline-start:0">
       <div class="pgroup-head ${open?'open':''}" style="border-inline-start-color:${color}" onclick="toggleWdGroup('${k}',this)">
         <span class="pchev">›</span>
         <span class="cdot" style="background:${color}"></span>
         <h3>${title}</h3>${meta}${editBtn}
-        <div class="psum"><span class="pn">${days.length} ימים${unpaid>0?` · ${fmtMoney(Math.round(unpaid))} פתוח`:''}</span><span class="pg">${fmtMoney(Math.round(gross))}</span></div>
+        <div class="psum"><span class="pn">${days.length}${totalDays?` / ${totalDays}`:''} ימים${unpaid>0?` · ${fmtMoney(Math.round(unpaid))} פתוח`:''}</span><span class="pg">${fmtMoney(Math.round(gross))}</span></div>
       </div>
       <div class="pgroup-body" style="display:${open?'block':'none'}">${body}</div>
     </div>`;
@@ -1828,7 +1878,7 @@ function renderWdPreview(){
   const p=computePay(readWdForm());
   const f=n=>Math.round(n).toLocaleString('he-IL')+' ₪';
   let lines=`<div class="ln"><span>תעריף יום הבסיס</span><span class="num">${f(p.rate)}</span></div>`;
-  if(p.otPay>0) lines+=`<div class="ln"><span>שעות נוספות (${(+p.otHours).toFixed(2).replace(/\.?0+$/,'')} ש' · מדרגות אקט)</span><span class="num">${f(p.otPay)}</span></div>`;
+  if(p.otPay>0){ const otDesc = p.otModel==='act'?'מדרגות אקט' : (p.otModel==='flat'?`×${(+p.otMult).toFixed(2).replace(/\.?0+$/,'')} מהתעריף השעתי`:'ללא'); lines+=`<div class="ln"><span>שעות נוספות (${(+p.otHours).toFixed(2).replace(/\.?0+$/,'')} ש' · ${otDesc})</span><span class="num">${f(p.otPay)}</span></div>`; }
   if(p.gear>0) lines+=`<div class="ln"><span>השכרת ציוד</span><span class="num">${f(p.gear)}</span></div>`;
   if(p.travel>0) lines+=`<div class="ln"><span>נסיעות</span><span class="num">${f(p.travel)}</span></div>`;
   if(p.other>0) lines+=`<div class="ln"><span>תוספת אחרת</span><span class="num">${f(p.other)}</span></div>`;
@@ -2029,9 +2079,12 @@ function renderProjDaysEditor(projId){
   const days=load(LS.workdays,[]).filter(w=>w.projectId===projId)
     .sort((a,b)=>(a.date||'').localeCompare(b.date||''));
   if(cntEl) cntEl.textContent='· '+days.length+' ימים';
+  const lastDay = days.length? days[days.length-1].date : new Date().toISOString().slice(0,10);
+  const _nd=new Date((lastDay||new Date().toISOString().slice(0,10))+'T00:00:00'); _nd.setDate(_nd.getDate()+1);
+  const nextDate=_nd.getFullYear()+'-'+String(_nd.getMonth()+1).padStart(2,'0')+'-'+String(_nd.getDate()).padStart(2,'0');
+  const addBox=`<div class="pde-add"><input type="date" id="pj_quickDate" value="${nextDate}" onkeydown="if(event.key==='Enter'){event.preventDefault();pjQuickAdd();}"><button class="btn sm primary" onclick="pjQuickAdd()">+ הוסף יום</button></div>`;
   if(!days.length){
-    wrap.innerHTML=`<p class="faint" style="font-size:13px;margin:4px 0 8px">אין עדיין ימים מקושרים. צור דרך "יצירת ימים" למעלה.</p>
-      <button class="btn sm ghost" style="width:100%" onclick="addProjDayInline()">+ הוסף יום</button>`;
+    wrap.innerHTML=`<p class="faint" style="font-size:13px;margin:4px 0 10px">אין עדיין ימים מקושרים. בחר תאריך והוסף (כל הוספה מקדמת ליום הבא) — או צור סדרה ב"יצירת ימים" למעלה, או ייבא מקולשיט ב"✦ עדכן מקובץ".</p>${addBox}`;
     return;
   }
   const stLabel={unissued:'טרם הופקה',issued:'הופקה',paid:'שולם',overdue:'באיחור'};
@@ -2055,7 +2108,23 @@ function renderProjDaysEditor(projId){
     <button class="btn sm" onclick="shiftProjDays()">הזז</button>
   </div>
   <div class="pde-list">${rows}</div>
-  <button class="btn sm ghost" style="margin-top:8px;width:100%" onclick="addProjDayInline()">+ הוסף יום</button>`;
+  ${addBox}`;
+}
+/* add one day on the chosen date; the picker auto-advances to the next day for fast weekly entry */
+function pjQuickAdd(){
+  const projId=_editingProjId; if(!projId) return;
+  const inp=document.getElementById('pj_quickDate');
+  let iso = (inp && inp.value) ? normDate(inp.value) : null;
+  if(!iso){
+    const ex=load(LS.workdays,[]).filter(w=>w.projectId===projId).sort((a,b)=>(a.date||'').localeCompare(b.date||''));
+    const last=ex.length?ex[ex.length-1].date:new Date().toISOString().slice(0,10);
+    const nd=new Date(last+'T00:00:00'); nd.setDate(nd.getDate()+1);
+    iso=nd.getFullYear()+'-'+String(nd.getMonth()+1).padStart(2,'0')+'-'+String(nd.getDate()).padStart(2,'0');
+  }
+  const list=load(LS.workdays,[]);
+  list.push({id:uid(), projectId:projId, date:iso, status:'unissued', tentative:false, createdAt:Date.now()});
+  save(LS.workdays,list);
+  renderProjDaysEditor(projId); refreshView();   // re-render resets the picker to the next open day
 }
 
 function updateProjDayDate(wdId, val){
