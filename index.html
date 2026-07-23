@@ -155,6 +155,21 @@ label.fld input:focus,label.fld select:focus,label.fld textarea:focus{outline:no
 .stat.clickable:hover .stat-go{opacity:1;transform:translateX(0);color:var(--accent)}
 .dash-hero-main.clickable{cursor:pointer;transition:background .15s}
 .dash-hero-main.clickable:hover{background:rgba(224,177,94,.05)}
+/* finance page */
+.fin-head{display:flex;align-items:center;gap:14px;margin-bottom:16px;flex-wrap:wrap}
+.fin-head h2{margin:0;font-size:22px;font-weight:700;min-width:150px;letter-spacing:-.3px}
+.fin-card{margin-top:16px}
+.fin-card-t{color:var(--muted);font-size:13px;margin-bottom:12px}
+.fin-bar{display:flex;height:26px;border-radius:8px;overflow:hidden;background:var(--bg2);border:1px solid var(--line)}
+.fin-seg{height:100%;transition:width .4s ease}
+.fin-seg.take{background:var(--good)}
+.fin-seg.tax{background:var(--accent)}
+.fin-seg.bit{background:var(--info)}
+.fin-legend{display:flex;flex-wrap:wrap;gap:16px;margin-top:12px;font-size:13px;color:var(--muted)}
+.fin-legend i{display:inline-block;width:11px;height:11px;border-radius:3px;margin-inline-end:6px;vertical-align:middle}
+.fin-legend i.take{background:var(--good)}
+.fin-legend i.tax{background:var(--accent)}
+.fin-legend i.bit{background:var(--info)}
 /* dashboard hero — the "how much is actually mine" panel */
 .dash-hero{display:grid;grid-template-columns:1.05fr 1fr;background:
   radial-gradient(120% 140% at 100% 0%, rgba(224,177,94,.10), transparent 55%), linear-gradient(140deg,var(--panel2),var(--panel));
@@ -437,6 +452,7 @@ td[title="לחץ לשינוי סטטוס"]:hover .st{border-color:var(--accent-d
       <button data-view="sign"><span class="ic">✍</span>חתימה</button>
       <button data-view="workdays"><span class="ic">☰</span>ימי עבודה</button>
       <button data-view="calendar"><span class="ic">▦</span>לוח שנה</button>
+      <button data-view="finance"><span class="ic">₪</span>פירוט פיננסי</button>
       <button data-view="expenses"><span class="ic">↧</span>הוצאות</button>
       <button data-view="settings"><span class="ic">⚙</span>הגדרות</button>
     </nav>
@@ -499,6 +515,11 @@ td[title="לחץ לשינוי סטטוס"]:hover .st{border-color:var(--accent-d
         </div>
         <div class="calgrid" id="calGrid"></div>
         <div class="cal-legend" id="calLegend"></div>
+      </section>
+
+      <!-- FINANCE (detailed financial summary) -->
+      <section class="view" id="view-finance">
+        <div id="finRoot"></div>
       </section>
 
       <!-- EXPENSES -->
@@ -771,7 +792,7 @@ function esc(s){ return String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;'
 function fmtMoney(n){ const s=settings(); return (Number(n)||0).toLocaleString('he-IL')+' '+s.currency; }
 
 /* ---------- navigation ---------- */
-const TITLES={dashboard:'דשבורד',contracts:'חוזים',sign:'חתימה על חוזים',workdays:'ימי עבודה',calendar:'לוח שנה',expenses:'הוצאות',settings:'הגדרות'};
+const TITLES={dashboard:'דשבורד',contracts:'חוזים',sign:'חתימה על חוזים',workdays:'ימי עבודה',calendar:'לוח שנה',finance:'פירוט פיננסי',expenses:'הוצאות',settings:'הגדרות'};
 let _currentView='dashboard';
 function go(v){
   _currentView=v;
@@ -784,6 +805,7 @@ function go(v){
   if(v==='contracts') renderContracts();
   if(v==='workdays') renderWorkdays();
   if(v==='calendar') renderCalendar();
+  if(v==='finance') renderFinance();
   if(v==='sign') renderSigner();
   if(v==='settings') fillSettings();
 }
@@ -2280,10 +2302,110 @@ function renderDashboard(){
 }
 /* dashboard panels drill down into the matching detail view */
 function dashOpen(kind){
-  if(kind==='owed'){ _wdFilter='unpaid'; _wdView='list'; go('workdays'); }
+  if(kind==='take'){ _finRef=new Date(); go('finance'); }   // take-home → dedicated financial breakdown
+  else if(kind==='owed'){ _wdFilter='unpaid'; _wdView='list'; go('workdays'); }
   else if(kind==='upcoming'){ go('calendar'); }
   else if(kind==='contracts'){ go('contracts'); }
-  else { _wdFilter='all'; go('workdays'); }   // 'month' + 'take' → this month's work-day detail
+  else { _wdFilter='all'; go('workdays'); }   // 'month' → this month's work-day list
+}
+
+/* ============================================================
+   FINANCE — dedicated financial breakdown (opened from the take-home panel)
+   ============================================================ */
+let _finRef=new Date();
+function finMove(d){ _finRef=new Date(_finRef.getFullYear(), _finRef.getMonth()+d, 1); renderFinance(); }
+function finToday(){ _finRef=new Date(); renderFinance(); }
+function renderFinance(){
+  const root=document.getElementById('finRoot'); if(!root) return;
+  const s=settings();
+  const y=_finRef.getFullYear(), mo=_finRef.getMonth(), ym=y+'-'+String(mo+1).padStart(2,'0');
+  const f=n=>fmtMoney(Math.round(n));
+  const all=load(LS.workdays,[]).filter(w=>w.tentative!==true);
+
+  // ---- selected month ----
+  const md=all.filter(w=>monthKey(w.date)===ym);
+  let income=0, vat=0, gross=0; const byStatus={unissued:0,issued:0,paid:0,overdue:0};
+  for(const w of md){ const p=computePay(w); income+=p.sub; vat+=p.vat; gross+=p.total; byStatus[w.status||'unissued']=(byStatus[w.status||'unissued']||0)+p.total; }
+  const taxM=incomeTaxNetAnnual(income*12)/12, bitM=bituachMonthly(income);
+  const takeM=Math.max(0, income-taxM-bitM);
+
+  // ---- year to date (income earned so far this year) ----
+  const ytd=all.filter(w=>(w.date||'').startsWith(y+'-'));
+  let yIncome=0, yVat=0; const perMonthIncome={};
+  for(const w of ytd){ const p=computePay(w); yIncome+=p.sub; yVat+=p.vat; const k=monthKey(w.date); perMonthIncome[k]=(perMonthIncome[k]||0)+p.sub; }
+  let yBit=0; for(const k in perMonthIncome) yBit+=bituachMonthly(perMonthIncome[k]);
+  const yTax=incomeTaxNetAnnual(yIncome), yTake=Math.max(0, yIncome-yTax-yBit);
+
+  // ---- proportion bar (of income before VAT) ----
+  const base=income>0?income:1;
+  const segTake=Math.max(0,takeM)/base*100, segTax=taxM/base*100, segBit=bitM/base*100;
+
+  const emptyMonth = md.length===0;
+  const bar = emptyMonth ? '' : `
+    <div class="card fin-card">
+      <div class="fin-card-t">לאן הולך הכסף · ${MONTH_NAMES[mo]}</div>
+      <div class="fin-bar">
+        <div class="fin-seg take" style="width:${segTake}%" title="נשאר לך"></div>
+        <div class="fin-seg tax"  style="width:${segTax}%"  title="מס הכנסה"></div>
+        <div class="fin-seg bit"  style="width:${segBit}%"  title="ביטוח לאומי"></div>
+      </div>
+      <div class="fin-legend">
+        <span><i class="take"></i>נשאר לך · ${Math.round(segTake)}%</span>
+        <span><i class="tax"></i>מס הכנסה · ${Math.round(segTax)}%</span>
+        <span><i class="bit"></i>ביטוח לאומי · ${Math.round(segBit)}%</span>
+      </div>
+    </div>`;
+
+  const payTiles = emptyMonth ? '' : `
+    <div class="dash-sec">חשבוניות החודש</div>
+    <div class="stats">
+      <div class="stat"><div class="k">שולם</div><div class="v good">${f(byStatus.paid)}</div></div>
+      <div class="stat"><div class="k">הופק · ממתין</div><div class="v gold">${f(byStatus.issued)}</div></div>
+      <div class="stat"><div class="k">באיחור</div><div class="v" style="color:var(--bad)">${f(byStatus.overdue)}</div></div>
+      <div class="stat"><div class="k">טרם הופק</div><div class="v">${f(byStatus.unissued)}</div></div>
+    </div>`;
+
+  root.innerHTML=`
+    <div class="fin-head">
+      <div class="cal-nav">
+        <button onclick="finMove(-1)" title="החודש הקודם">›</button>
+        <button onclick="finMove(1)" title="החודש הבא">‹</button>
+      </div>
+      <h2>${MONTH_NAMES[mo]} ${y}</h2>
+      <button class="btn sm ghost" onclick="finToday()">החודש</button>
+      <div style="flex:1"></div>
+      <button class="btn sm" onclick="go('dashboard')">← חזרה לדשבורד</button>
+    </div>
+
+    <div class="dash-hero" style="margin-top:2px">
+      <div class="dash-hero-main">
+        <div class="k">כמה באמת שלך · ${MONTH_NAMES[mo]}</div>
+        <div class="big-num">${f(takeM)}</div>
+        <div class="sub">${emptyMonth?'אין הכנסה החודש. הוסף ימי עבודה והמספרים יופיעו כאן.':'מתוך הכנסה של '+f(income)+' לפני מע"מ. השומה הסופית נקבעת בסוף השנה מול רואה החשבון.'}</div>
+      </div>
+      <div class="dash-hero-break">
+        <div class="brk"><span>הכנסה לפני מע"מ</span><span class="num">${f(income)}</span></div>
+        <div class="brk minus"><span>− מס הכנסה (הפרשה)</span><span class="num">${f(taxM)}</span></div>
+        <div class="brk minus"><span>− ביטוח לאומי + בריאות</span><span class="num">${f(bitM)}</span></div>
+        <div class="brk total"><span>נשאר לך</span><span class="num">${f(takeM)}</span></div>
+      </div>
+    </div>
+
+    ${bar}
+
+    <div class="notice" style="margin:16px 0">מע"מ שגבית החודש: <b>${f(vat)}</b> (מתוך ${f(gross)} בחשבוניות). זהו כסף שאינו שלך — אתה מעביר אותו למדינה בדוח המע"מ. לכן הוא לא נכלל ב"כמה באמת שלך".</div>
+
+    ${payTiles}
+
+    <div class="dash-sec">מתחילת השנה (${y})</div>
+    <div class="stats">
+      <div class="stat"><div class="k">הכנסה מצטברת (לפני מע"מ)</div><div class="v">${f(yIncome)}</div></div>
+      <div class="stat"><div class="k">הפרשה למס הכנסה</div><div class="v gold">${f(yTax)}</div></div>
+      <div class="stat"><div class="k">הפרשה לביטוח לאומי</div><div class="v gold">${f(yBit)}</div></div>
+      <div class="stat"><div class="k">נשאר לך מתחילת השנה</div><div class="v good">${f(yTake)}</div></div>
+    </div>
+
+    <div class="src" style="margin-top:16px">ההפרשות הן הערכה מדויקת לחיסכון לפי שיעורי ${s.taxYear} (<a onclick="go('settings')" style="cursor:pointer;color:var(--info)">ניתן לכוונון בהגדרות</a>). מס ההכנסה מחושב מדורג על הרווח; כשיתווסף מודול ההוצאות, הן יקטינו את הרווח החייב.</div>`;
 }
 
 /* ---------- Modal helpers ---------- */
