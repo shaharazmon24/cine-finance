@@ -2537,6 +2537,49 @@ function dashOpen(kind){
 let _finRef=new Date();
 function finMove(d){ _finRef=new Date(_finRef.getFullYear(), _finRef.getMonth()+d, 1); renderFinance(); }
 function finToday(){ _finRef=new Date(); renderFinance(); }
+/* ---- cash-flow: when a day's payment is expected, from end-of-work-month + terms ---- */
+function parsePaymentTermsDays(t){
+  if(!t) return 30;                    // sensible default when the contract doesn't specify
+  const s=String(t); const m=s.match(/(\d+)/);
+  if(m) return +m[1];
+  if(/מיידי/.test(s)) return 0;
+  return 30;
+}
+function expectedPayDate(w){
+  const d=normDate(w.date); if(!d) return null;
+  const c=resolveContract(w); const days=parsePaymentTermsDays(c && c.paymentTerms);
+  const [y,mo]=d.split('-').map(Number);
+  const dt=new Date(y, mo, 0);         // last day of the work month (mo is 1-based → 0-day of next month)
+  dt.setDate(dt.getDate()+days);
+  return dt.getFullYear()+'-'+String(dt.getMonth()+1).padStart(2,'0')+'-'+String(dt.getDate()).padStart(2,'0');
+}
+/* two-figure cash-flow for a month: performed this month vs expected to ARRIVE this month */
+function finCashflowHtml(ym){
+  const f=n=>fmtMoney(Math.round(n));
+  const all=load(LS.workdays,[]).filter(w=>w.tentative!==true);
+  let performed=0; for(const w of all){ if(monthKey(w.date)===ym) performed+=computePay(w).total; }
+  const arrivals=all.filter(w=>{ const e=expectedPayDate(w); return e && monthKey(e)===ym; })
+    .sort((a,b)=>(a.date||'').localeCompare(b.date||''));
+  let expected=0; for(const w of arrivals) expected+=computePay(w).total;
+  if(performed===0 && arrivals.length===0) return '';
+  const rows=arrivals.map(w=>{
+    const p=computePay(w), nm=esc(dayLabel(w)||'—'), c=resolveContract(w);
+    const terms=(c&&c.paymentTerms)?esc(c.paymentTerms):('שוטף+'+parsePaymentTermsDays(c&&c.paymentTerms));
+    const tag=w.status==='paid'?' · <span style="color:var(--good)">שולם</span>':(w.status==='overdue'?' · <span style="color:var(--bad)">באיחור</span>':(w.status==='issued'?' · הופק':''));
+    return `<div class="fin-brk-row" onclick="openWorkday('${w.id}')">
+      <span class="cdot" style="background:${w.projectId?projColor(w.projectId):'#6b7280'}"></span>
+      <div style="flex:1;min-width:0"><div class="fin-brk-nm">${nm}</div><div class="faint" style="font-size:11.5px">בוצע ${fmtDate(w.date)} · ${terms}${tag}</div></div>
+      <div class="num" style="font-weight:600">${f(p.total)}</div>
+    </div>`;
+  }).join('');
+  return `<div class="dash-sec">תזרים · ${MONTH_NAMES[(+ym.slice(5,7))-1]}</div>
+    <div class="notice" style="margin-bottom:12px;font-size:12.5px">"בוצע" = עבודות שנעשו החודש. "צפוי להיכנס" = כסף שאמור להגיע החודש בפועל, לפי תנאי התשלום (שוטף+ מסוף חודש העבודה). הסכומים כוללים מע"מ (הכסף שנכנס לחשבון).</div>
+    <div class="stats" style="margin-bottom:12px">
+      <div class="stat"><div class="k">בוצע החודש (עבודות)</div><div class="v">${f(performed)}</div></div>
+      <div class="stat"><div class="k">צפוי להיכנס החודש</div><div class="v gold">${f(expected)}</div></div>
+    </div>
+    ${rows?`<div class="card" style="padding:6px 12px">${rows}</div>`:'<div class="faint" style="font-size:13px;padding:4px 2px">אין תשלומים צפויים להיכנס החודש.</div>'}`;
+}
 /* itemised list of what makes up a month's income — the works + amounts behind the number */
 function finBreakdownHtml(md, ym){
   const f=n=>fmtMoney(Math.round(n));
@@ -2669,6 +2712,8 @@ function renderFinance(){
     ${payTiles}
 
     ${emptyMonth?'':finBreakdownHtml(md, ym)}
+
+    ${finCashflowHtml(ym)}
 
     <div class="dash-sec">מתחילת השנה (${y}) — מדויק בפועל</div>
     <div class="notice" style="margin-bottom:12px;font-size:12.5px">כאן המספרים המדויקים לפי כל ההכנסה שכבר נכנסה השנה — מס הכנסה מחושב מדורג על המצטבר (לא לפי שיעור ממוצע). זה המספר ש"מתכנס" לאמת בסוף השנה.</div>
@@ -3386,7 +3431,7 @@ async function exportSignedPDF(){
 document.getElementById('signFile').addEventListener('change', e=>{ const f=e.target.files[0]; if(f) signLoadFile(f); e.target.value=''; });
 
 /* ---------- version + auto-update (keeps the installed PWA in sync with the site) ---------- */
-const APP_VERSION='2026.08.02.2';
+const APP_VERSION='2026.08.02.3';
 function setVersionLabels(){
   const a=document.getElementById('appVer'); if(a) a.textContent=APP_VERSION;
   const b=document.getElementById('appVerSettings'); if(b) b.textContent=APP_VERSION;
