@@ -468,6 +468,7 @@ td[title="לחץ לשינוי סטטוס"]:hover .st{border-color:var(--accent-d
       <div class="apikey-pill" id="syncPill" title="מצב סנכרון ענן" style="cursor:pointer" onclick="go('settings')"><span class="dot"></span><span>לא מחובר לענן</span></div>
       <div class="apikey-pill" id="backupPill" title="מצב גיבוי הנתונים" style="cursor:pointer" onclick="go('settings')"><span class="dot"></span><span>לא מחובר גיבוי</span></div>
       <div class="apikey-pill"><span class="dot" id="keyDot"></span><span id="keyText">לא הוגדר מפתח API</span></div>
+      <div class="apikey-pill" style="opacity:.55;font-size:11px">גרסה <span id="appVer">—</span></div>
     </div>
   </aside>
 
@@ -586,6 +587,16 @@ td[title="לחץ לשינוי סטטוס"]:hover .st{border-color:var(--accent-d
           </div>
 
           <div class="card" id="backupCard"></div>
+
+          <div class="card">
+            <div class="row" style="justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px">
+              <div>
+                <h3 style="margin:0 0 2px;font-weight:500">גרסה</h3>
+                <div class="faint" style="font-size:12.5px">אתה על גרסה <b id="appVerSettings">—</b>. האפליקציה מתעדכנת אוטומטית מהאתר.</div>
+              </div>
+              <button class="btn sm" onclick="checkForUpdate()">בדוק עדכון עכשיו</button>
+            </div>
+          </div>
 
           <button class="btn primary" onclick="saveSettings()">שמור הגדרות</button>
         </div>
@@ -3297,8 +3308,46 @@ async function exportSignedPDF(){
 }
 document.getElementById('signFile').addEventListener('change', e=>{ const f=e.target.files[0]; if(f) signLoadFile(f); e.target.value=''; });
 
+/* ---------- version + auto-update (keeps the installed PWA in sync with the site) ---------- */
+const APP_VERSION='2026.08.02';
+function setVersionLabels(){
+  const a=document.getElementById('appVer'); if(a) a.textContent=APP_VERSION;
+  const b=document.getElementById('appVerSettings'); if(b) b.textContent=APP_VERSION;
+}
+function showUpdateBanner(){
+  if(document.getElementById('updBanner')) return;
+  const b=document.createElement('div'); b.id='updBanner';
+  b.style.cssText='position:fixed;bottom:calc(16px + env(safe-area-inset-bottom));left:50%;transform:translateX(-50%);z-index:200;background:var(--accent);color:#1a1205;padding:10px 12px 10px 18px;border-radius:999px;font-size:14px;font-weight:600;box-shadow:0 6px 24px rgba(0,0,0,.45);display:flex;align-items:center;gap:10px';
+  b.innerHTML='גרסה חדשה זמינה <button onclick="applyUpdate()" style="background:#1a1205;color:var(--accent);border:0;border-radius:999px;padding:6px 14px;font-weight:700;cursor:pointer">רענן</button>';
+  document.body.appendChild(b);
+}
+function applyUpdate(){
+  navigator.serviceWorker && navigator.serviceWorker.getRegistration().then(reg=>{
+    if(reg && reg.waiting){ reg.waiting.postMessage('skipWaiting'); } else location.reload();
+  });
+}
+function checkForUpdate(){
+  if(!('serviceWorker' in navigator)){ location.reload(); return; }
+  navigator.serviceWorker.getRegistration().then(reg=>{ if(reg){ reg.update(); setTimeout(()=>{ if(!reg.waiting) location.reload(); },1200); } else location.reload(); });
+}
+if('serviceWorker' in navigator){
+  window.addEventListener('load',()=>{
+    navigator.serviceWorker.register('./sw.js').then(reg=>{
+      reg.update();
+      setInterval(()=>reg.update(), 60*60*1000);          // hourly update check
+      reg.addEventListener('updatefound',()=>{
+        const nw=reg.installing; if(!nw) return;
+        nw.addEventListener('statechange',()=>{ if(nw.state==='installed' && navigator.serviceWorker.controller) showUpdateBanner(); });
+      });
+    }).catch(()=>{});
+  });
+  let _swRefreshing=false;
+  navigator.serviceWorker.addEventListener('controllerchange',()=>{ if(_swRefreshing) return; _swRefreshing=true; location.reload(); });
+}
+
 /* ---------- boot ---------- */
 normalizeAllDates();   // fix any legacy/imported non-canonical dates so sort + calendar are correct
+setVersionLabels();
 refreshKeyPill();
 renderDashboard();
 initBackup();
