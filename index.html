@@ -61,7 +61,7 @@ input,select,textarea{font-family:inherit}
 .nav button.active{background:var(--panel2); color:var(--text); box-shadow:inset -3px 0 0 var(--accent)}
 .nav button.active .ic{color:var(--accent)}
 .nav .ic{width:20px; text-align:center; font-size:17px}
-.nav-moretoggle{display:none}   /* desktop: full sidebar, no "More" button */
+.nav button.nav-moretoggle{display:none}   /* desktop: full sidebar, no "More" button (beats .nav button specificity) */
 /* mobile "More" bottom sheet */
 .sheet-bg{position:fixed;inset:0;background:rgba(5,6,9,.55);backdrop-filter:blur(2px);z-index:60;display:none;opacity:0;transition:opacity .2s}
 .sheet-bg.open{display:block;opacity:1}
@@ -420,9 +420,9 @@ td[title="לחץ לשינוי סטטוס"]:hover .st{border-color:var(--accent-d
   .nav button.active{background:transparent; box-shadow:none}
   .nav button.active .ic{color:var(--accent)}
   .nav .ic{font-size:20px; width:auto}
-  .nav-more{display:none}                 /* secondary items live in the "More" sheet on mobile */
-  .nav-moretoggle{display:flex}           /* show the "More" tab (5 spacious tabs total) */
-  .nav-moretoggle.active .ic,.nav-moretoggle.active{color:var(--accent)}
+  .nav button.nav-more{display:none}                 /* secondary items live in the "More" sheet on mobile */
+  .nav button.nav-moretoggle{display:flex}           /* show the "More" tab (5 spacious tabs total) */
+  .nav button.nav-moretoggle.active .ic,.nav button.nav-moretoggle.active{color:var(--accent)}
   main{min-width:0}
   .topbar{height:54px; flex:0 0 54px; padding:0 16px; gap:8px; position:sticky; top:0; z-index:30}
   .topbar h1{font-size:18px}
@@ -1650,7 +1650,10 @@ function wdRowHtml(w,{showName=true, sel=false, noStatus=false}={}){
   const selCell = sel? `<td onclick="event.stopPropagation()"><input type="checkbox" class="wd-sel" data-id="${w.id}" ${_wdSel.has(w.id)?'checked':''} onclick="wdToggleSel('${w.id}',this.checked)" style="width:auto"></td>` : '';
   const needDot = needsInvoice(w)? `<span class="need-dot" title="עבר תאריך — טרם הופקה חשבונית">●</span> ` : '';
   const statusCell = noStatus? '' : `<td onclick="event.stopPropagation();cycleStatus('${w.id}')" style="cursor:pointer" title="לחץ לשינוי סטטוס">${needDot}${st}</td>`;
-  const exVat = (_wdShowExVat && p.plusVat)? `<div class="faint" style="font-size:11.5px;font-weight:400">${fmtMoney(Math.round(p.sub))} לפני מע"מ</div>` : '';
+  const showEx = _wdShowExVat && p.plusVat;
+  const grossCell = showEx
+    ? `${fmtMoney(Math.round(p.sub))}<span class="faint" style="font-weight:400"> לפני מע"מ</span><div class="faint" style="font-size:11.5px;font-weight:400">${fmtMoney(Math.round(p.total))} כולל מע"מ</div>`
+    : `${fmtMoney(Math.round(p.total))}${p.plusVat?'<span class="faint" style="font-weight:400"> כולל מע"מ</span>':''}`;
   const roleTxt = esc(w.role || dayLabelRole(w) || '—');
   return `<tr onclick="openWorkday('${w.id}')">
     ${selCell}
@@ -1658,7 +1661,7 @@ function wdRowHtml(w,{showName=true, sel=false, noStatus=false}={}){
     ${nameCell}
     <td>${roleTxt}</td>
     <td class="num">${hrs}</td>
-    <td class="num gross">${fmtMoney(Math.round(p.total))}${p.plusVat?'<span class="faint" style="font-weight:400"> כולל מע"מ</span>':''}${exVat}</td>
+    <td class="num gross">${grossCell}</td>
     ${statusCell}
     <td onclick="event.stopPropagation()"><button class="rowdel" title="מחק" onclick="deleteWorkday('${w.id}')">🗑</button></td>
   </tr>`;
@@ -1688,7 +1691,10 @@ function wdCardHtml(w,{showName=true, noStatus=false}={}){
   const stEl = noStatus? '' : `<span onclick="event.stopPropagation();cycleStatus('${w.id}')" style="cursor:pointer" title="לחץ לשינוי">${st}</span>`;
   const nameLine=showName?`<div class="wd-card-name">${dot} ${esc(dayLabel(w)||'—')}</div>`:'';
   const needDot = needsInvoice(w)? `<span class="need-dot" title="עבר תאריך — טרם הופקה חשבונית">●</span> ` : '';
-  const exVat = (_wdShowExVat && p.plusVat)? ` <span class="faint" style="font-size:11px">· ${fmtMoney(Math.round(p.sub))} לפני</span>` : '';
+  const showEx = _wdShowExVat && p.plusVat;
+  const grossCard = showEx
+    ? `${fmtMoney(Math.round(p.sub))} <span class="faint">לפני מע"מ</span><span class="faint" style="font-size:11px"> · ${fmtMoney(Math.round(p.total))} כולל</span>`
+    : `${fmtMoney(Math.round(p.total))}${p.plusVat?' <span class="faint">כולל מע"מ</span>':''}`;
   return `<div class="wd-card" onclick="openWorkday('${w.id}')">
     <div class="wd-card-top">
       <label onclick="event.stopPropagation()" style="display:flex"><input type="checkbox" class="wd-sel" data-id="${w.id}" ${_wdSel.has(w.id)?'checked':''} onclick="wdToggleSel('${w.id}',this.checked)" style="width:auto"></label>
@@ -1698,7 +1704,7 @@ function wdCardHtml(w,{showName=true, noStatus=false}={}){
     ${nameLine}
     ${meta.trim()?`<div class="wd-card-meta">${meta}</div>`:''}
     <div class="wd-card-foot">
-      <span class="wd-card-gross">${fmtMoney(Math.round(p.total))}${p.plusVat?' <span class="faint">כולל מע"מ</span>':''}${exVat}</span>
+      <span class="wd-card-gross">${grossCard}</span>
       ${stEl}
     </div>
   </div>`;
@@ -3431,7 +3437,7 @@ async function exportSignedPDF(){
 document.getElementById('signFile').addEventListener('change', e=>{ const f=e.target.files[0]; if(f) signLoadFile(f); e.target.value=''; });
 
 /* ---------- version + auto-update (keeps the installed PWA in sync with the site) ---------- */
-const APP_VERSION='2026.08.02.3';
+const APP_VERSION='2026.08.02.4';
 function setVersionLabels(){
   const a=document.getElementById('appVer'); if(a) a.textContent=APP_VERSION;
   const b=document.getElementById('appVerSettings'); if(b) b.textContent=APP_VERSION;
