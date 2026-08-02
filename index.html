@@ -187,6 +187,40 @@ label.fld input:focus,label.fld select:focus,label.fld textarea:focus{outline:no
 .fin-brk-row[onclick]{cursor:pointer}
 .fin-brk-row[onclick]:hover{background:var(--panel2);border-radius:8px}
 .fin-brk-nm{font-size:14px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+/* ---- finance page: hero + collapsible module cards ---- */
+.fin-hero{background:radial-gradient(120% 140% at 100% 0%, rgba(224,177,94,.10), transparent 55%), linear-gradient(140deg,var(--panel2),var(--panel));border:1px solid var(--line2);border-radius:18px;padding:24px 26px;margin-bottom:16px;box-shadow:0 8px 34px rgba(0,0,0,.34)}
+.fin-hero-k{color:var(--muted);font-size:14px}
+.fin-hero-num{font-size:44px;font-weight:700;color:var(--accent);line-height:1.05;font-variant-numeric:tabular-nums;margin:2px 0 6px}
+.fin-hero-sub{color:var(--muted);font-size:13px;line-height:1.6;max-width:62ch}
+.fin-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:14px;align-items:start}
+.fin-mod{background:var(--panel);border:1px solid var(--line);border-radius:14px;overflow:hidden;transition:border-color .15s}
+.fin-mod.open{border-color:var(--line2)}
+.fin-mod-head{display:flex;align-items:center;gap:12px;width:100%;background:transparent;border:0;color:var(--text);text-align:start;padding:15px 18px;cursor:pointer;font:inherit}
+.fin-mod-head:hover{background:var(--panel2)}
+.fin-mod-title{font-size:14px;color:var(--muted);font-weight:500}
+.fin-mod-headline{margin-inline-start:auto;font-size:18px;font-weight:700;font-variant-numeric:tabular-nums;white-space:nowrap}
+.fin-mod-headline.gold{color:var(--accent)}
+.fin-mod-headline.good{color:var(--good)}
+.fin-mod-chev{color:var(--faint);font-size:18px;transition:transform .2s ease;flex-shrink:0}
+.fin-mod.open .fin-mod-chev{transform:rotate(90deg)}
+.fin-mod-body{display:grid;grid-template-rows:0fr;transition:grid-template-rows .25s ease}
+.fin-mod.open .fin-mod-body{grid-template-rows:1fr}
+.fin-mod-inner{overflow:hidden;padding:0 18px}
+.fin-mod.open .fin-mod-inner{padding:2px 18px 18px;border-top:1px solid var(--line)}
+.fin-lines{display:flex;flex-direction:column}
+.fin-line{display:flex;justify-content:space-between;align-items:center;gap:12px;padding:9px 0;border-top:1px solid var(--line);font-size:14px}
+.fin-line:first-child{border-top:0}
+.fin-line .num{font-variant-numeric:tabular-nums;font-weight:600}
+.fin-line.minus{color:var(--muted)}
+.fin-line.total{border-top:1px solid var(--line2);font-weight:700}
+.fin-line.total .num{color:var(--good)}
+.fin-two{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin:12px 0}
+.fin-two-k{color:var(--muted);font-size:12.5px;margin-bottom:4px}
+.fin-two-v{font-size:22px;font-weight:700;font-variant-numeric:tabular-nums}
+.fin-two-v.gold{color:var(--accent)}
+.finnote{color:var(--muted);font-size:12px;line-height:1.6;margin:10px 0}
+.fin-list{margin-top:2px}
+@media (prefers-reduced-motion: reduce){ .fin-mod-body,.fin-mod-chev{transition:none} }
 /* dashboard hero — the "how much is actually mine" panel */
 .dash-hero{display:grid;grid-template-columns:1.05fr 1fr;background:
   radial-gradient(120% 140% at 100% 0%, rgba(224,177,94,.10), transparent 55%), linear-gradient(140deg,var(--panel2),var(--panel));
@@ -2471,8 +2505,7 @@ function renderDashboard(){
 
   const month=workdays.filter(w=>(w.date||'').startsWith(ym) && w.tentative!==true);
   let monthExVat=0, owed=0;
-  for(const w of month){ monthExVat+=computePay(w).sub; }
-  monthExVat+=historicalIncomeForMonth(ym);   // include any summary income for the current month
+  for(const w of month){ monthExVat+=computePay(w).sub; }   // work performed this month only (historical is a yearly sync, not "this month")
   for(const w of workdays){ if(w.tentative===true) continue; const st=w.status; if(st==='issued'||st==='overdue') owed+=computePay(w).total; }
   const upcoming=workdays.filter(w=>normDate(w.date)>=todayStr).length;
   const _proj=annualProjection(now.getFullYear());
@@ -2559,15 +2592,14 @@ function expectedPayDate(w){
   dt.setDate(dt.getDate()+days);
   return dt.getFullYear()+'-'+String(dt.getMonth()+1).padStart(2,'0')+'-'+String(dt.getDate()).padStart(2,'0');
 }
-/* two-figure cash-flow for a month: performed this month vs expected to ARRIVE this month */
-function finCashflowHtml(ym){
+/* cash-flow data for a month: performed this month vs expected to ARRIVE this month */
+function finCashflowData(ym){
   const f=n=>fmtMoney(Math.round(n));
   const all=load(LS.workdays,[]).filter(w=>w.tentative!==true);
   let performed=0; for(const w of all){ if(monthKey(w.date)===ym) performed+=computePay(w).total; }
   const arrivals=all.filter(w=>{ const e=expectedPayDate(w); return e && monthKey(e)===ym; })
     .sort((a,b)=>(a.date||'').localeCompare(b.date||''));
   let expected=0; for(const w of arrivals) expected+=computePay(w).total;
-  if(performed===0 && arrivals.length===0) return '';
   const rows=arrivals.map(w=>{
     const p=computePay(w), nm=esc(dayLabel(w)||'—'), c=resolveContract(w);
     const terms=(c&&c.paymentTerms)?esc(c.paymentTerms):('שוטף+'+parsePaymentTermsDays(c&&c.paymentTerms));
@@ -2578,18 +2610,20 @@ function finCashflowHtml(ym){
       <div class="num" style="font-weight:600">${f(p.total)}</div>
     </div>`;
   }).join('');
-  return `<div class="dash-sec">תזרים · ${MONTH_NAMES[(+ym.slice(5,7))-1]}</div>
-    <div class="notice" style="margin-bottom:12px;font-size:12.5px">"בוצע" = עבודות שנעשו החודש. "צפוי להיכנס" = כסף שאמור להגיע החודש בפועל, לפי תנאי התשלום (שוטף+ מסוף חודש העבודה). הסכומים כוללים מע"מ (הכסף שנכנס לחשבון).</div>
-    <div class="stats" style="margin-bottom:12px">
-      <div class="stat"><div class="k">בוצע החודש (עבודות)</div><div class="v">${f(performed)}</div></div>
-      <div class="stat"><div class="k">צפוי להיכנס החודש</div><div class="v gold">${f(expected)}</div></div>
+  const body=`
+    <div class="finnote">"בוצע" = עבודות שנעשו החודש · "צפוי להיכנס" = כסף שאמור להגיע בפועל לפי תנאי התשלום, מסוף חודש העבודה. כולל מע"מ.</div>
+    <div class="fin-two">
+      <div><div class="fin-two-k">בוצע החודש</div><div class="fin-two-v">${f(performed)}</div></div>
+      <div><div class="fin-two-k">צפוי להיכנס</div><div class="fin-two-v gold">${f(expected)}</div></div>
     </div>
-    ${rows?`<div class="card" style="padding:6px 12px">${rows}</div>`:'<div class="faint" style="font-size:13px;padding:4px 2px">אין תשלומים צפויים להיכנס החודש.</div>'}`;
+    ${rows?`<div class="fin-list">${rows}</div>`:'<div class="faint" style="font-size:13px">אין תשלומים צפויים להיכנס החודש.</div>'}`;
+  return { performed, expected, body };
 }
-/* itemised list of what makes up a month's income — the works + amounts behind the number */
-function finBreakdownHtml(md, ym){
+/* body: the work days behind a month's income */
+function finBreakdownBody(md){
   const f=n=>fmtMoney(Math.round(n));
-  const rows=md.slice().sort((a,b)=>(a.date||'').localeCompare(b.date||'')).map(w=>{
+  if(!md.length) return '<div class="faint" style="font-size:13px">אין עבודות החודש.</div>';
+  return '<div class="fin-list">'+md.slice().sort((a,b)=>(a.date||'').localeCompare(b.date||'')).map(w=>{
     const p=computePay(w); const nm=esc(dayLabel(w)||'—'); const role=esc(w.role||dayLabelRole(w)||'');
     const col=w.projectId?projColor(w.projectId):'#6b7280';
     return `<div class="fin-brk-row" onclick="openWorkday('${w.id}')">
@@ -2597,16 +2631,25 @@ function finBreakdownHtml(md, ym){
       <div style="flex:1;min-width:0"><div class="fin-brk-nm">${nm}${role?' · '+role:''}</div><div class="faint" style="font-size:11.5px">${fmtDate(w.date)}</div></div>
       <div class="num" style="font-weight:600;text-align:start">${f(p.total)}${p.plusVat?`<div class="faint" style="font-size:11px;font-weight:400">${f(p.sub)} לפני מע"מ</div>`:''}</div>
     </div>`;
-  }).join('');
-  const incRows=getIncome().filter(e=>e.month===ym).map(e=>
-    `<div class="fin-brk-row">
-      <span class="cdot" style="background:#6b7280"></span>
-      <div style="flex:1;min-width:0"><div class="fin-brk-nm">הכנסה היסטורית${e.source?' · '+esc(e.source):''}</div><div class="faint" style="font-size:11.5px">${monthName(e.month)}</div></div>
-      <div class="num" style="font-weight:600;text-align:start">${f(e.amountExVat)}<div class="faint" style="font-size:11px;font-weight:400">לפני מע"מ</div></div>
-    </div>`).join('');
-  if(!rows && !incRows) return '';
-  return `<div class="dash-sec">ממה מורכב · ${MONTH_NAMES[(+ym.slice(5,7))-1]}</div>
-    <div class="card" style="padding:6px 12px">${rows}${incRows}</div>`;
+  }).join('')+'</div>';
+}
+let _finOpen=new Set();   // which finance modules are expanded (persists across re-render)
+function toggleFinMod(id){
+  const el=document.querySelector('.fin-mod[data-mod="'+id+'"]'); if(!el) return;
+  const open=el.classList.toggle('open');
+  const h=el.querySelector('.fin-mod-head'); if(h) h.setAttribute('aria-expanded', open);
+  if(open) _finOpen.add(id); else _finOpen.delete(id);
+}
+function finMod(id, title, headline, body, cls){
+  const open=_finOpen.has(id);
+  return `<div class="fin-mod ${open?'open':''}" data-mod="${id}">
+    <button class="fin-mod-head" onclick="toggleFinMod('${id}')" aria-expanded="${open}">
+      <span class="fin-mod-title">${title}</span>
+      <span class="fin-mod-headline ${cls||''}">${headline}</span>
+      <span class="fin-mod-chev">›</span>
+    </button>
+    <div class="fin-mod-body"><div class="fin-mod-inner">${body}</div></div>
+  </div>`;
 }
 function renderFinance(){
   const root=document.getElementById('finRoot'); if(!root) return;
@@ -2615,72 +2658,75 @@ function renderFinance(){
   const f=n=>fmtMoney(Math.round(n));
   const all=load(LS.workdays,[]).filter(w=>w.tentative!==true);
 
-  // ---- selected month ----
+  // selected month — WORK DAYS ONLY. Historical income is a separate yearly sync, not "this month".
   const md=all.filter(w=>monthKey(w.date)===ym);
-  let daysIncome=0, vat=0, gross=0; const byStatus={unissued:0,issued:0,paid:0,overdue:0};
-  for(const w of md){ const p=computePay(w); daysIncome+=p.sub; vat+=p.vat; gross+=p.total; byStatus[w.status||'unissued']=(byStatus[w.status||'unissued']||0)+p.total; }
-  const histM=historicalIncomeForMonth(ym);   // summary income (e.g. imported from Morning)
-  const income=daysIncome+histM;
-  const proj=annualProjection(y);             // smart annual estimate → effective tax rate
-  const effRate=proj.effRate;
+  let income=0, vat=0, gross=0; const byStatus={unissued:0,issued:0,paid:0,overdue:0};
+  for(const w of md){ const p=computePay(w); income+=p.sub; vat+=p.vat; gross+=p.total; byStatus[w.status||'unissued']=(byStatus[w.status||'unissued']||0)+p.total; }
+  const proj=annualProjection(y), effRate=proj.effRate;
   const bitM=bituachMonthly(income);
-  const taxM=income*effRate;                  // income tax is annual → smooth via the effective rate, not month×12
+  const taxM=income*effRate;                  // income tax is annual → smoothed via the effective rate
   const takeM=Math.max(0, income-taxM-bitM);
 
-  // ---- year to date (income earned so far this year) ----
+  // year to date (work days + historical sync income) — for the accurate cumulative figures
   const ytd=all.filter(w=>(w.date||'').startsWith(y+'-'));
-  let yIncome=0, yVat=0; const perMonthIncome={};
-  for(const w of ytd){ const p=computePay(w); yIncome+=p.sub; yVat+=p.vat; const k=monthKey(w.date); perMonthIncome[k]=(perMonthIncome[k]||0)+p.sub; }
+  let yIncome=0; const perMonthIncome={};
+  for(const w of ytd){ const p=computePay(w); yIncome+=p.sub; const k=monthKey(w.date); perMonthIncome[k]=(perMonthIncome[k]||0)+p.sub; }
   for(const e of getIncome()){ if((e.month||'').startsWith(y+'-')){ perMonthIncome[e.month]=(perMonthIncome[e.month]||0)+(+e.amountExVat||0); yIncome+=(+e.amountExVat||0); } }
   let yBit=0; for(const k in perMonthIncome) yBit+=bituachMonthly(perMonthIncome[k]);
   const yTax=incomeTaxNetAnnual(yIncome), yTake=Math.max(0, yIncome-yTax-yBit);
+  const histYear=historicalIncomeForYear(y);
 
-  // ---- proportion bar (of income before VAT) ----
+  const cf=finCashflowData(ym);
   const base=income>0?income:1;
   const segTake=Math.max(0,takeM)/base*100, segTax=taxM/base*100, segBit=bitM/base*100;
+  const emptyMonth = md.length===0;
 
-  const emptyMonth = md.length===0 && histM===0;
-  const bar = emptyMonth ? '' : `
-    <div class="card fin-card">
-      <div class="fin-card-t">לאן הולך הכסף · ${MONTH_NAMES[mo]}</div>
-      <div class="fin-bar">
-        <div class="fin-seg take" style="width:${segTake}%" title="נשאר לך"></div>
-        <div class="fin-seg tax"  style="width:${segTax}%"  title="מס הכנסה"></div>
-        <div class="fin-seg bit"  style="width:${segBit}%"  title="ביטוח לאומי"></div>
-      </div>
-      <div class="fin-legend">
-        <span><i class="take"></i>נשאר לך · ${Math.round(segTake)}%</span>
-        <span><i class="tax"></i>מס הכנסה · ${Math.round(segTax)}%</span>
-        <span><i class="bit"></i>ביטוח לאומי · ${Math.round(segBit)}%</span>
-      </div>
-    </div>`;
+  // ---------- collapsible modules ----------
+  const mCalc = finMod('calc','איך זה מחושב', f(takeM), `
+    <div class="fin-lines">
+      <div class="fin-line"><span>הכנסה לפני מע"מ</span><span class="num">${f(income)}</span></div>
+      <div class="fin-line minus"><span>− מס הכנסה (${(effRate*100).toFixed(1)}%)</span><span class="num">${f(taxM)}</span></div>
+      <div class="fin-line minus"><span>− ביטוח לאומי + בריאות</span><span class="num">${f(bitM)}</span></div>
+      <div class="fin-line total"><span>נשאר לך</span><span class="num">${f(takeM)}</span></div>
+    </div>
+    ${income>0?`<div class="fin-bar" style="margin-top:14px"><div class="fin-seg take" style="width:${segTake}%"></div><div class="fin-seg tax" style="width:${segTax}%"></div><div class="fin-seg bit" style="width:${segBit}%"></div></div>
+    <div class="fin-legend"><span><i class="take"></i>נשאר ${Math.round(segTake)}%</span><span><i class="tax"></i>מס ${Math.round(segTax)}%</span><span><i class="bit"></i>ביט"ל ${Math.round(segBit)}%</span></div>`:''}
+    <div class="finnote">מע"מ שגבית: <b>${f(vat)}</b> — אינו שלך, מועבר למדינה; לא נכלל ב"נשאר לך".</div>`, 'gold');
 
-  const payTiles = emptyMonth ? '' : `
-    <div class="dash-sec">חשבוניות החודש</div>
-    <div class="stats">
-      <div class="stat"><div class="k">שולם</div><div class="v good">${f(byStatus.paid)}</div></div>
-      <div class="stat"><div class="k">הופק · ממתין</div><div class="v gold">${f(byStatus.issued)}</div></div>
-      <div class="stat"><div class="k">באיחור</div><div class="v" style="color:var(--bad)">${f(byStatus.overdue)}</div></div>
-      <div class="stat"><div class="k">טרם הופק</div><div class="v">${f(byStatus.unissued)}</div></div>
-    </div>`;
+  const mRate = finMod('rate','שיעור מס אפקטיבי', (effRate*100).toFixed(1)+'%', `
+    <div class="finnote">${esc(proj.basis)}${proj.isOverride?' · ידני':''} · מס שנתי צפוי ${f(proj.tax)}</div>
+    <label class="fld" style="font-size:12px;margin-top:4px">צפי הכנסה שנתית (לפני מע"מ) — ניתן לעריכה
+      <input type="number" id="fin_annualEst" value="${Math.round(proj.projected)}" onchange="saveAnnualEstimate(${y}, this.value)">
+    </label>
+    ${proj.isOverride?`<button class="btn sm ghost" style="margin-top:8px" onclick="saveAnnualEstimate(${y}, '')">↺ חזרה לחישוב אוטומטי</button>`:''}
+    <div class="finnote">מס ההכנסה מדורג ושנתי, לא לפי חודש בודד. ערוך את הצפי וכל המספרים מתעדכנים.</div>`, 'gold');
 
-  const projPanel = `
-    <div class="card fin-card" style="margin-top:16px">
-      <div class="row" style="justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:16px">
-        <div>
-          <div class="fin-card-t" style="margin:0 0 4px">שיעור מס אפקטיבי · ${y}</div>
-          <div style="font-size:32px;font-weight:700;color:var(--accent);line-height:1.1">${(effRate*100).toFixed(1)}%</div>
-          <div class="faint" style="font-size:12px;margin-top:4px">${esc(proj.basis)}${proj.isOverride?' · ידני':''} · מס שנתי צפוי ${f(proj.tax)}</div>
-        </div>
-        <div style="min-width:220px;flex:1;max-width:280px">
-          <label class="fld" style="font-size:12px">צפי הכנסה שנתית (לפני מע"מ) — ניתן לעריכה
-            <input type="number" id="fin_annualEst" value="${Math.round(proj.projected)}" onchange="saveAnnualEstimate(${y}, this.value)">
-          </label>
-          ${proj.isOverride?`<button class="btn sm ghost" style="margin-top:8px" onclick="saveAnnualEstimate(${y}, '')">↺ חזרה לחישוב אוטומטי</button>`:''}
-          <div class="faint" style="font-size:11.5px;margin-top:6px">שיעור המס נגזר מהצפי השנתי. ערוך אותו וכל המספרים מתעדכנים.</div>
-        </div>
-      </div>
-    </div>`;
+  const mCash = finMod('cash','תזרים · צפי כניסות', f(cf.expected), cf.body);
+  const mBreak = finMod('breakdown','ממה מורכב · '+MONTH_NAMES[mo], md.length?md.length+' עבודות':'—', finBreakdownBody(md));
+
+  const pendingSum=byStatus.issued+byStatus.overdue;
+  const mInv = finMod('inv','חשבוניות החודש', pendingSum>0?('ממתין '+f(pendingSum)):(byStatus.paid>0?'שולם ✓':'—'), `
+    <div class="fin-lines">
+      <div class="fin-line"><span>שולם</span><span class="num" style="color:var(--good)">${f(byStatus.paid)}</span></div>
+      <div class="fin-line"><span>הופק · ממתין</span><span class="num" style="color:var(--accent)">${f(byStatus.issued)}</span></div>
+      <div class="fin-line"><span>באיחור</span><span class="num" style="color:var(--bad)">${f(byStatus.overdue)}</span></div>
+      <div class="fin-line"><span>טרם הופק</span><span class="num">${f(byStatus.unissued)}</span></div>
+    </div>`);
+
+  const mYtd = finMod('ytd','מתחילת השנה · מדויק בפועל', f(yTake), `
+    <div class="finnote">מס מדורג על כל ההכנסה שכבר נכנסה השנה (המספר ש"מתכנס" לאמת בסוף השנה).</div>
+    <div class="fin-lines">
+      <div class="fin-line"><span>הכנסה מצטברת (לפני מע"מ)</span><span class="num">${f(yIncome)}</span></div>
+      <div class="fin-line minus"><span>− מס הכנסה</span><span class="num">${f(yTax)}</span></div>
+      <div class="fin-line minus"><span>− ביטוח לאומי</span><span class="num">${f(yBit)}</span></div>
+      <div class="fin-line total"><span>נשאר לך בפועל</span><span class="num">${f(yTake)}</span></div>
+    </div>`, 'good');
+
+  const mHist = finMod('hist','הכנסה היסטורית · Morning', histYear>0?f(histYear):'הוסף', finIncomeSectionBody(y));
+
+  const heroSub = emptyMonth
+    ? 'אין עבודות החודש. הוסף ימי עבודה, או נווט לחודש אחר.'
+    : `הכנסת ${MONTH_NAMES[mo]}: ${f(income)} לפני מע"מ · שיעור מס אפקטיבי ${(effRate*100).toFixed(1)}%. לחץ על כרטיס לפירוט.`;
 
   root.innerHTML=`
     <div class="fin-head">
@@ -2691,52 +2737,24 @@ function renderFinance(){
       <h2>${MONTH_NAMES[mo]} ${y}</h2>
       <button class="btn sm ghost" onclick="finToday()">החודש</button>
       <div style="flex:1"></div>
-      <button class="btn sm" onclick="go('dashboard')">← חזרה לדשבורד</button>
+      <button class="btn sm" onclick="go('dashboard')">← דשבורד</button>
     </div>
 
-    <div class="dash-hero" style="margin-top:2px">
-      <div class="dash-hero-main">
-        <div class="k">כמה באמת שלך · ${MONTH_NAMES[mo]}</div>
-        <div class="big-num">${f(takeM)}</div>
-        <div class="sub">${emptyMonth?'אין הכנסה החודש. הוסף ימי עבודה והמספרים יופיעו כאן.':'הכנסת '+MONTH_NAMES[mo]+': '+f(income)+' · לפי שיעור מס אפקטיבי '+(effRate*100).toFixed(1)+'% (על צפי שנתי '+f(proj.projected)+'). ביטוח לאומי מחושב חודשי.'}</div>
-      </div>
-      <div class="dash-hero-break">
-        <div class="brk"><span>הכנסה לפני מע"מ</span><span class="num">${f(income)}</span></div>
-        ${histM>0?`<div class="brk" style="opacity:.7;font-size:12px"><span>· מתוכם הכנסה היסטורית (Morning)</span><span class="num">${f(histM)}</span></div>`:''}
-        <div class="brk minus"><span>− מס הכנסה (הפרשה)</span><span class="num">${f(taxM)}</span></div>
-        <div class="brk minus"><span>− ביטוח לאומי + בריאות</span><span class="num">${f(bitM)}</span></div>
-        <div class="brk total"><span>נשאר לך</span><span class="num">${f(takeM)}</span></div>
-      </div>
+    <div class="fin-hero">
+      <div class="fin-hero-k">כמה באמת שלך · ${MONTH_NAMES[mo]}</div>
+      <div class="fin-hero-num">${f(takeM)}</div>
+      <div class="fin-hero-sub">${heroSub}</div>
     </div>
 
-    ${emptyMonth?'':projPanel}
-
-    ${bar}
-
-    <div class="notice" style="margin:16px 0">מע"מ שגבית החודש: <b>${f(vat)}</b> (מתוך ${f(gross)} בחשבוניות). זהו כסף שאינו שלך — אתה מעביר אותו למדינה בדוח המע"מ. לכן הוא לא נכלל ב"כמה באמת שלך".</div>
-
-    ${payTiles}
-
-    ${emptyMonth?'':finBreakdownHtml(md, ym)}
-
-    ${finCashflowHtml(ym)}
-
-    <div class="dash-sec">מתחילת השנה (${y}) — מדויק בפועל</div>
-    <div class="notice" style="margin-bottom:12px;font-size:12.5px">כאן המספרים המדויקים לפי כל ההכנסה שכבר נכנסה השנה — מס הכנסה מחושב מדורג על המצטבר (לא לפי שיעור ממוצע). זה המספר ש"מתכנס" לאמת בסוף השנה.</div>
-    <div class="stats">
-      <div class="stat"><div class="k">הכנסה מצטברת (לפני מע"מ)</div><div class="v">${f(yIncome)}</div></div>
-      <div class="stat"><div class="k">מס הכנסה על המצטבר</div><div class="v gold">${f(yTax)}</div></div>
-      <div class="stat"><div class="k">ביטוח לאומי מצטבר</div><div class="v gold">${f(yBit)}</div></div>
-      <div class="stat"><div class="k">נשאר לך בפועל</div><div class="v good">${f(yTake)}</div></div>
+    <div class="fin-grid">
+      ${mCalc}${mCash}${mBreak}${mInv}${mRate}${mYtd}${mHist}
     </div>
 
-    ${finIncomeSectionHtml(y)}
-
-    <div class="src" style="margin-top:16px">ההפרשות הן הערכה מדויקת לחיסכון לפי שיעורי ${s.taxYear} (<a onclick="go('settings')" style="cursor:pointer;color:var(--info)">ניתן לכוונון בהגדרות</a>). מס ההכנסה מחושב מדורג על הרווח; כשיתווסף מודול ההוצאות, הן יקטינו את הרווח החייב.</div>`;
+    <div class="src" style="margin-top:16px">ההפרשות הן הערכה לחיסכון לפי שיעורי ${s.taxYear} · <a onclick="go('settings')" style="cursor:pointer;color:var(--info)">כוונון בהגדרות</a>. השומה הסופית נקבעת בסוף השנה מול רואה החשבון.</div>`;
 }
 
-/* ---- finance page: historical-income section + Morning import ---- */
-function finIncomeSectionHtml(y){
+/* ---- finance page: historical-income module body + Morning import ---- */
+function finIncomeSectionBody(y){
   const f=n=>fmtMoney(Math.round(n));
   const list=getIncome().slice().sort((a,b)=>(b.month||'').localeCompare(a.month||''));
   const rows = list.length ? list.map(e=>`
@@ -2746,13 +2764,12 @@ function finIncomeSectionHtml(y){
       <div class="num" style="font-weight:600;white-space:nowrap">${f(e.amountExVat)}</div>
       <button class="btn sm ghost" onclick="openIncomeEntry('${e.id}')">ערוך</button>
       <button class="btn sm" style="color:var(--bad);border-color:var(--bad)" onclick="deleteIncomeEntry('${e.id}')">מחק</button>
-    </div>`).join('') : '<div class="faint" style="font-size:13px;padding:8px 2px">אין עדיין הכנסה היסטורית. ייבא דוח מ‑Morning או הוסף חודש ידנית — כדי שמספרי המס יהיו מדויקים לשנה, בלי להזין ימים.</div>';
+    </div>`).join('') : '<div class="faint" style="font-size:13px;padding:4px 2px">אין עדיין הכנסה היסטורית.</div>';
   return `
-    <div class="dash-sec" style="margin-top:22px">הכנסה היסטורית · Morning</div>
-    <div class="notice" style="margin-bottom:12px">אין צורך להזין ימים ישנים. ייבא דוח הכנסות מ‑Morning (Excel / CSV / PDF) ו‑Claude יסכם את ההכנסה החודשית לפני מע"מ — או הוסף חודש ידנית. הסכומים כאן מזינים את חישובי המס והביטוח הלאומי למעלה.</div>
-    <div class="row" style="gap:10px;margin-bottom:12px;flex-wrap:wrap">
-      <button class="btn primary" onclick="pickIncomeFile()">✦ ייבא מ‑Morning</button>
-      <button class="btn" onclick="openIncomeEntry()">+ הוסף חודש ידנית</button>
+    <div class="finnote">הכנסה מלפני השימוש באפליקציה — לסנכרון בלבד. היא מזינה את חישוב המס השנתי, ולא מוצגת כהכנסת חודש נוכחי.</div>
+    <div class="row" style="gap:10px;margin:4px 0 12px;flex-wrap:wrap">
+      <button class="btn primary sm" onclick="pickIncomeFile()">✦ ייבא מ‑Morning</button>
+      <button class="btn sm" onclick="openIncomeEntry()">+ הוסף חודש ידנית</button>
     </div>
     <div class="pm-list">${rows}</div>`;
 }
@@ -3437,7 +3454,7 @@ async function exportSignedPDF(){
 document.getElementById('signFile').addEventListener('change', e=>{ const f=e.target.files[0]; if(f) signLoadFile(f); e.target.value=''; });
 
 /* ---------- version + auto-update (keeps the installed PWA in sync with the site) ---------- */
-const APP_VERSION='2026.08.02.4';
+const APP_VERSION='2026.08.02.5';
 function setVersionLabels(){
   const a=document.getElementById('appVer'); if(a) a.textContent=APP_VERSION;
   const b=document.getElementById('appVerSettings'); if(b) b.textContent=APP_VERSION;
