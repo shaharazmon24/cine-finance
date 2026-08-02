@@ -61,6 +61,17 @@ input,select,textarea{font-family:inherit}
 .nav button.active{background:var(--panel2); color:var(--text); box-shadow:inset -3px 0 0 var(--accent)}
 .nav button.active .ic{color:var(--accent)}
 .nav .ic{width:20px; text-align:center; font-size:17px}
+.nav-moretoggle{display:none}   /* desktop: full sidebar, no "More" button */
+/* mobile "More" bottom sheet */
+.sheet-bg{position:fixed;inset:0;background:rgba(5,6,9,.55);backdrop-filter:blur(2px);z-index:60;display:none;opacity:0;transition:opacity .2s}
+.sheet-bg.open{display:block;opacity:1}
+.sheet{position:fixed;left:0;right:0;bottom:0;background:var(--panel);border-top:1px solid var(--line2);border-radius:20px 20px 0 0;padding:10px 14px calc(18px + env(safe-area-inset-bottom));box-shadow:0 -12px 40px rgba(0,0,0,.5);transform:translateY(100%);transition:transform .24s cubic-bezier(.2,.7,.3,1)}
+.sheet-bg.open .sheet{transform:translateY(0)}
+.sheet-handle{width:40px;height:4px;border-radius:99px;background:var(--line2);margin:4px auto 12px}
+.sheet-title{font-size:13px;color:var(--faint);padding:0 6px 8px}
+.sheet-item{display:flex;align-items:center;gap:14px;width:100%;background:transparent;border:0;color:var(--text);text-align:start;padding:14px 10px;font-size:16px;border-radius:12px}
+.sheet-item:hover,.sheet-item:active{background:var(--panel2)}
+.sheet-item .ic{width:24px;text-align:center;font-size:19px;color:var(--accent)}
 .side-foot{border-top:1px solid var(--line); padding-top:12px; margin-top:8px}
 .apikey-pill{display:flex; align-items:center; gap:8px; font-size:12px; color:var(--muted); padding:6px 8px}
 .dot{width:8px;height:8px;border-radius:50%;background:var(--bad);flex:0 0 8px}
@@ -171,6 +182,11 @@ label.fld input:focus,label.fld select:focus,label.fld textarea:focus{outline:no
 .fin-legend i.take{background:var(--good)}
 .fin-legend i.tax{background:var(--accent)}
 .fin-legend i.bit{background:var(--info)}
+.fin-brk-row{display:flex;align-items:center;gap:11px;padding:11px 4px;border-top:1px solid var(--line)}
+.fin-brk-row:first-child{border-top:0}
+.fin-brk-row[onclick]{cursor:pointer}
+.fin-brk-row[onclick]:hover{background:var(--panel2);border-radius:8px}
+.fin-brk-nm{font-size:14px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 /* dashboard hero — the "how much is actually mine" panel */
 .dash-hero{display:grid;grid-template-columns:1.05fr 1fr;background:
   radial-gradient(120% 140% at 100% 0%, rgba(224,177,94,.10), transparent 55%), linear-gradient(140deg,var(--panel2),var(--panel));
@@ -265,6 +281,10 @@ td[title="לחץ לשינוי סטטוס"]:hover .st{border-color:var(--accent-d
 .chip{background:var(--panel);border:1px solid var(--line2);color:var(--muted);border-radius:999px;padding:7px 15px;font-size:13px;transition:.12s}
 .chip:hover{border-color:var(--accent-dim);color:var(--text)}
 .chip.on{background:var(--accent);color:#1a1205;border-color:var(--accent);font-weight:600}
+.chip.chip-warn{border-color:var(--warn);color:var(--warn)}
+.chip.chip-warn.on{background:var(--warn);color:#1a1205;border-color:var(--warn)}
+.need-dot{color:var(--warn);font-size:9px;vertical-align:middle;animation:needpulse 1.8s ease-in-out infinite}
+@keyframes needpulse{0%,100%{opacity:1}50%{opacity:.35}}
 .scope-pill{display:inline-flex;align-items:center;gap:9px;background:rgba(224,177,94,.12);border:1px solid var(--accent-dim);color:var(--accent);border-radius:999px;padding:6px 8px 6px 15px;font-size:13px;flex-basis:100%;order:-1;margin-bottom:2px;width:fit-content}
 .scope-pill b{color:var(--text);font-weight:600}
 .scope-pill button{background:rgba(255,255,255,.06);border:0;color:var(--muted);width:22px;height:22px;border-radius:50%;font-size:12px;line-height:1;cursor:pointer}
@@ -400,6 +420,9 @@ td[title="לחץ לשינוי סטטוס"]:hover .st{border-color:var(--accent-d
   .nav button.active{background:transparent; box-shadow:none}
   .nav button.active .ic{color:var(--accent)}
   .nav .ic{font-size:20px; width:auto}
+  .nav-more{display:none}                 /* secondary items live in the "More" sheet on mobile */
+  .nav-moretoggle{display:flex}           /* show the "More" tab (5 spacious tabs total) */
+  .nav-moretoggle.active .ic,.nav-moretoggle.active{color:var(--accent)}
   main{min-width:0}
   .topbar{height:54px; flex:0 0 54px; padding:0 16px; gap:8px; position:sticky; top:0; z-index:30}
   .topbar h1{font-size:18px}
@@ -456,13 +479,14 @@ td[title="לחץ לשינוי סטטוס"]:hover .st{border-color:var(--accent-d
     <div class="brand-sub">ניהול העסק · נתונים מקומיים</div>
     <nav class="nav" id="nav">
       <button data-view="dashboard" class="active"><span class="ic">◧</span>דשבורד</button>
-      <button data-view="contracts"><span class="ic">❒</span>חוזים</button>
-      <button data-view="sign"><span class="ic">✍</span>חתימה</button>
       <button data-view="workdays"><span class="ic">☰</span>ימי עבודה</button>
       <button data-view="calendar"><span class="ic">▦</span>לוח שנה</button>
       <button data-view="finance"><span class="ic">₪</span>פירוט פיננסי</button>
-      <button data-view="expenses"><span class="ic">↧</span>הוצאות</button>
-      <button data-view="settings"><span class="ic">⚙</span>הגדרות</button>
+      <button data-view="contracts" class="nav-more"><span class="ic">❒</span>חוזים</button>
+      <button data-view="sign" class="nav-more"><span class="ic">✍</span>חתימה</button>
+      <button data-view="expenses" class="nav-more"><span class="ic">↧</span>הוצאות</button>
+      <button data-view="settings" class="nav-more"><span class="ic">⚙</span>הגדרות</button>
+      <button class="nav-moretoggle" onclick="openMoreSheet()"><span class="ic">⋯</span>עוד</button>
     </nav>
     <div class="side-foot">
       <div class="apikey-pill" id="syncPill" title="מצב סנכרון ענן" style="cursor:pointer" onclick="go('settings')"><span class="dot"></span><span>לא מחובר לענן</span></div>
@@ -604,6 +628,18 @@ td[title="לחץ לשינוי סטטוס"]:hover .st{border-color:var(--accent-d
 
     </div>
   </main>
+</div>
+
+<!-- Mobile "More" bottom sheet: secondary nav items -->
+<div class="sheet-bg" id="moreSheet" onclick="if(event.target===this)closeMoreSheet()">
+  <div class="sheet">
+    <div class="sheet-handle"></div>
+    <div class="sheet-title">עוד</div>
+    <button class="sheet-item" onclick="moreGo('contracts')"><span class="ic">❒</span><span>חוזים</span></button>
+    <button class="sheet-item" onclick="moreGo('sign')"><span class="ic">✍</span><span>חתימה על חוזה</span></button>
+    <button class="sheet-item" onclick="moreGo('expenses')"><span class="ic">↧</span><span>הוצאות</span></button>
+    <button class="sheet-item" onclick="moreGo('settings')"><span class="ic">⚙</span><span>הגדרות</span></button>
+  </div>
 </div>
 
 <!-- Contract review modal -->
@@ -885,6 +921,8 @@ function go(v){
   document.querySelectorAll('.view').forEach(el=>el.classList.remove('active'));
   document.getElementById('view-'+v).classList.add('active');
   document.querySelectorAll('#nav button').forEach(b=>b.classList.toggle('active', b.dataset.view===v));
+  const moreT=document.querySelector('.nav-moretoggle');
+  if(moreT) moreT.classList.toggle('active', ['contracts','sign','expenses','settings'].includes(v));  // light up "More" for secondary views
   document.getElementById('pageTitle').textContent=TITLES[v];
   renderTopActions(v);
   if(v==='dashboard') renderDashboard();
@@ -895,7 +933,10 @@ function go(v){
   if(v==='sign') renderSigner();
   if(v==='settings') fillSettings();
 }
-document.getElementById('nav').addEventListener('click',e=>{ const b=e.target.closest('button'); if(b) go(b.dataset.view); });
+document.getElementById('nav').addEventListener('click',e=>{ const b=e.target.closest('button'); if(b && b.dataset.view) go(b.dataset.view); });
+function openMoreSheet(){ document.getElementById('moreSheet').classList.add('open'); }
+function closeMoreSheet(){ document.getElementById('moreSheet').classList.remove('open'); }
+function moreGo(v){ closeMoreSheet(); go(v); }
 
 function renderTopActions(v){
   const el=document.getElementById('topActions'); el.innerHTML='';
@@ -1555,6 +1596,9 @@ function computePay(wd){
 
 let _wdFilter='all', _wdView='list', _wdSort='asc', _wdSel=new Set();
 let _wdOpenGroups=new Set();   // which project groups are expanded in "by project" view (persists across re-render)
+let _wdShowExVat=false;        // toggle: show the pre-VAT amount alongside the incl-VAT amount
+/* a confirmed day whose date has passed but no invoice was issued yet → you still need to invoice it */
+function needsInvoice(w){ return w.tentative!==true && (w.status||'unissued')==='unissued' && normDate(w.date) < new Date().toISOString().slice(0,10); }
 function renderWorkdays(){
   const list=load(LS.workdays,[]).slice().sort((a,b)=>{
     const da=normDate(a.date), db=normDate(b.date);
@@ -1570,10 +1614,11 @@ function renderWorkdays(){
   let rows=list;
   if(_wdFilter==='confirmed') rows=list.filter(w=>w.tentative!==true);
   else if(_wdFilter==='tentative') rows=list.filter(w=>w.tentative===true);
-  else if(_wdFilter==='unpaid') rows=list.filter(w=>w.status!=='paid' && w.tentative!==true);
+  // "waiting for payment" = invoice was ISSUED and not yet paid (issued/overdue) — NOT days with no invoice
+  else if(_wdFilter==='unpaid' || _wdFilter==='owed') rows=list.filter(w=>(w.status==='issued'||w.status==='overdue') && w.tentative!==true);
+  else if(_wdFilter==='toinvoice') rows=list.filter(w=>needsInvoice(w));
   // ---- dashboard drill-downs: show exactly what the clicked tile counted ----
   else if(_wdFilter==='month'){ const now=new Date(), ym=now.getFullYear()+'-'+String(now.getMonth()+1).padStart(2,'0'); rows=list.filter(w=>(w.date||'').startsWith(ym) && w.tentative!==true); }
-  else if(_wdFilter==='owed') rows=list.filter(w=>(w.status==='issued'||w.status==='overdue') && w.tentative!==true);
   else if(_wdFilter==='upcoming'){ const today=new Date().toISOString().slice(0,10); rows=list.filter(w=>normDate(w.date)>=today); }
 
   if(!list.length){
@@ -1603,7 +1648,9 @@ function wdRowHtml(w,{showName=true, sel=false, noStatus=false}={}){
     nameCell=`<td>${dot}${name}${cname}</td>`;
   }
   const selCell = sel? `<td onclick="event.stopPropagation()"><input type="checkbox" class="wd-sel" data-id="${w.id}" ${_wdSel.has(w.id)?'checked':''} onclick="wdToggleSel('${w.id}',this.checked)" style="width:auto"></td>` : '';
-  const statusCell = noStatus? '' : `<td onclick="event.stopPropagation();cycleStatus('${w.id}')" style="cursor:pointer" title="לחץ לשינוי סטטוס">${st}</td>`;
+  const needDot = needsInvoice(w)? `<span class="need-dot" title="עבר תאריך — טרם הופקה חשבונית">●</span> ` : '';
+  const statusCell = noStatus? '' : `<td onclick="event.stopPropagation();cycleStatus('${w.id}')" style="cursor:pointer" title="לחץ לשינוי סטטוס">${needDot}${st}</td>`;
+  const exVat = (_wdShowExVat && p.plusVat)? `<div class="faint" style="font-size:11.5px;font-weight:400">${fmtMoney(Math.round(p.sub))} לפני מע"מ</div>` : '';
   const roleTxt = esc(w.role || dayLabelRole(w) || '—');
   return `<tr onclick="openWorkday('${w.id}')">
     ${selCell}
@@ -1611,7 +1658,7 @@ function wdRowHtml(w,{showName=true, sel=false, noStatus=false}={}){
     ${nameCell}
     <td>${roleTxt}</td>
     <td class="num">${hrs}</td>
-    <td class="num gross">${fmtMoney(Math.round(p.total))}${p.plusVat?'<span class="faint" style="font-weight:400"> כולל מע"מ</span>':''}</td>
+    <td class="num gross">${fmtMoney(Math.round(p.total))}${p.plusVat?'<span class="faint" style="font-weight:400"> כולל מע"מ</span>':''}${exVat}</td>
     ${statusCell}
     <td onclick="event.stopPropagation()"><button class="rowdel" title="מחק" onclick="deleteWorkday('${w.id}')">🗑</button></td>
   </tr>`;
@@ -1640,16 +1687,18 @@ function wdCardHtml(w,{showName=true, noStatus=false}={}){
   const st=w.tentative?`<span class="st tentative"><span class="d"></span>משוער</span>`:`<span class="st ${w.status||'unissued'}"><span class="d"></span>${statusLabel(w.status||'unissued')}</span>`;
   const stEl = noStatus? '' : `<span onclick="event.stopPropagation();cycleStatus('${w.id}')" style="cursor:pointer" title="לחץ לשינוי">${st}</span>`;
   const nameLine=showName?`<div class="wd-card-name">${dot} ${esc(dayLabel(w)||'—')}</div>`:'';
+  const needDot = needsInvoice(w)? `<span class="need-dot" title="עבר תאריך — טרם הופקה חשבונית">●</span> ` : '';
+  const exVat = (_wdShowExVat && p.plusVat)? ` <span class="faint" style="font-size:11px">· ${fmtMoney(Math.round(p.sub))} לפני</span>` : '';
   return `<div class="wd-card" onclick="openWorkday('${w.id}')">
     <div class="wd-card-top">
       <label onclick="event.stopPropagation()" style="display:flex"><input type="checkbox" class="wd-sel" data-id="${w.id}" ${_wdSel.has(w.id)?'checked':''} onclick="wdToggleSel('${w.id}',this.checked)" style="width:auto"></label>
-      <span class="wd-card-date">${fmtDate(w.date)}</span>
+      <span class="wd-card-date">${needDot}${fmtDate(w.date)}</span>
       <button class="rowdel" style="margin-inline-start:auto" onclick="event.stopPropagation();deleteWorkday('${w.id}')">🗑</button>
     </div>
     ${nameLine}
     ${meta.trim()?`<div class="wd-card-meta">${meta}</div>`:''}
     <div class="wd-card-foot">
-      <span class="wd-card-gross">${fmtMoney(Math.round(p.total))}${p.plusVat?' <span class="faint">כולל מע"מ</span>':''}</span>
+      <span class="wd-card-gross">${fmtMoney(Math.round(p.total))}${p.plusVat?' <span class="faint">כולל מע"מ</span>':''}${exVat}</span>
       ${stEl}
     </div>
   </div>`;
@@ -1786,9 +1835,12 @@ function cycleMonthStatus(projId, ym){
 
 const WD_DRILL_LABELS={month:'ימי החודש',owed:'ממתין לתשלום · הופק וטרם שולם',upcoming:'ימים מתוכננים · מהיום והלאה'};
 function renderWdFilters(){
-  const opts=[['all','הכל'],['confirmed','מאושרים'],['tentative','משוערים'],['unpaid','ממתינים לתשלום']];
-  const chips=opts.map(([k,l])=>`<button class="chip ${_wdFilter===k?'on':''}" onclick="setWdFilter('${k}')">${l}</button>`).join('');
+  const toInvoiceCount=load(LS.workdays,[]).filter(needsInvoice).length;
+  const opts=[['all','הכל'],['confirmed','מאושרים'],['tentative','משוערים'],['unpaid','ממתינים לתשלום'],
+    ['toinvoice','להפיק חשבונית'+(toInvoiceCount?' ('+toInvoiceCount+')':'')]];
+  const chips=opts.map(([k,l])=>`<button class="chip ${_wdFilter===k?'on':''} ${k==='toinvoice'&&toInvoiceCount?'chip-warn':''}" onclick="setWdFilter('${k}')">${l}</button>`).join('');
   const sort=`<button class="chip" onclick="toggleWdSort()" title="מיון לפי תאריך">תאריך ${_wdSort==='asc'?'↑ ישן→חדש':'↓ חדש→ישן'}</button>`;
+  const vatTog=`<button class="chip ${_wdShowExVat?'on':''}" onclick="toggleWdVat()" title="הצג סכום לפני מע\\"מ לצד הסכום כולל מע\\"מ">₪ ${_wdShowExVat?'עם/בלי מע"מ':'הצג לפני מע"מ'}</button>`;
   const tog=`<div class="viewtog">
     <button class="${_wdView==='list'?'on':''}" onclick="setWdView('list')">רשימה</button>
     <button class="${_wdView==='project'?'on':''}" onclick="setWdView('project')">לפי פרויקט</button>
@@ -1797,8 +1849,9 @@ function renderWdFilters(){
   const scope = WD_DRILL_LABELS[_wdFilter]
     ? `<div class="scope-pill">מציג: <b>${WD_DRILL_LABELS[_wdFilter]}</b><button onclick="setWdFilter('all')" title="נקה סינון">✕</button></div>`
     : '';
-  document.getElementById('wdFilters').innerHTML=scope+chips+sort+tog;
+  document.getElementById('wdFilters').innerHTML=scope+chips+sort+vatTog+tog;
 }
+function toggleWdVat(){ _wdShowExVat=!_wdShowExVat; renderWorkdays(); }
 function setWdFilter(k){ _wdFilter=k; renderWorkdays(); }
 function setWdView(v){ _wdView=v; renderWorkdays(); }
 function toggleWdSort(){ _wdSort = _wdSort==='asc'?'desc':'asc'; renderWorkdays(); }
@@ -2484,6 +2537,28 @@ function dashOpen(kind){
 let _finRef=new Date();
 function finMove(d){ _finRef=new Date(_finRef.getFullYear(), _finRef.getMonth()+d, 1); renderFinance(); }
 function finToday(){ _finRef=new Date(); renderFinance(); }
+/* itemised list of what makes up a month's income — the works + amounts behind the number */
+function finBreakdownHtml(md, ym){
+  const f=n=>fmtMoney(Math.round(n));
+  const rows=md.slice().sort((a,b)=>(a.date||'').localeCompare(b.date||'')).map(w=>{
+    const p=computePay(w); const nm=esc(dayLabel(w)||'—'); const role=esc(w.role||dayLabelRole(w)||'');
+    const col=w.projectId?projColor(w.projectId):'#6b7280';
+    return `<div class="fin-brk-row" onclick="openWorkday('${w.id}')">
+      <span class="cdot" style="background:${col}"></span>
+      <div style="flex:1;min-width:0"><div class="fin-brk-nm">${nm}${role?' · '+role:''}</div><div class="faint" style="font-size:11.5px">${fmtDate(w.date)}</div></div>
+      <div class="num" style="font-weight:600;text-align:start">${f(p.total)}${p.plusVat?`<div class="faint" style="font-size:11px;font-weight:400">${f(p.sub)} לפני מע"מ</div>`:''}</div>
+    </div>`;
+  }).join('');
+  const incRows=getIncome().filter(e=>e.month===ym).map(e=>
+    `<div class="fin-brk-row">
+      <span class="cdot" style="background:#6b7280"></span>
+      <div style="flex:1;min-width:0"><div class="fin-brk-nm">הכנסה היסטורית${e.source?' · '+esc(e.source):''}</div><div class="faint" style="font-size:11.5px">${monthName(e.month)}</div></div>
+      <div class="num" style="font-weight:600;text-align:start">${f(e.amountExVat)}<div class="faint" style="font-size:11px;font-weight:400">לפני מע"מ</div></div>
+    </div>`).join('');
+  if(!rows && !incRows) return '';
+  return `<div class="dash-sec">ממה מורכב · ${MONTH_NAMES[(+ym.slice(5,7))-1]}</div>
+    <div class="card" style="padding:6px 12px">${rows}${incRows}</div>`;
+}
 function renderFinance(){
   const root=document.getElementById('finRoot'); if(!root) return;
   const s=settings();
@@ -2592,6 +2667,8 @@ function renderFinance(){
     <div class="notice" style="margin:16px 0">מע"מ שגבית החודש: <b>${f(vat)}</b> (מתוך ${f(gross)} בחשבוניות). זהו כסף שאינו שלך — אתה מעביר אותו למדינה בדוח המע"מ. לכן הוא לא נכלל ב"כמה באמת שלך".</div>
 
     ${payTiles}
+
+    ${emptyMonth?'':finBreakdownHtml(md, ym)}
 
     <div class="dash-sec">מתחילת השנה (${y}) — מדויק בפועל</div>
     <div class="notice" style="margin-bottom:12px;font-size:12.5px">כאן המספרים המדויקים לפי כל ההכנסה שכבר נכנסה השנה — מס הכנסה מחושב מדורג על המצטבר (לא לפי שיעור ממוצע). זה המספר ש"מתכנס" לאמת בסוף השנה.</div>
@@ -3309,7 +3386,7 @@ async function exportSignedPDF(){
 document.getElementById('signFile').addEventListener('change', e=>{ const f=e.target.files[0]; if(f) signLoadFile(f); e.target.value=''; });
 
 /* ---------- version + auto-update (keeps the installed PWA in sync with the site) ---------- */
-const APP_VERSION='2026.08.02';
+const APP_VERSION='2026.08.02.2';
 function setVersionLabels(){
   const a=document.getElementById('appVer'); if(a) a.textContent=APP_VERSION;
   const b=document.getElementById('appVerSettings'); if(b) b.textContent=APP_VERSION;

@@ -3,7 +3,7 @@
    latest version when online, and falls back to cache only when offline.
    Cross-origin requests (CDN libraries, the Anthropic API, Supabase) pass straight
    through and are never intercepted. Bump CACHE (and APP_VERSION in index.html) each deploy. */
-const CACHE = 'cine-finance-2026.08.02';
+const CACHE = 'cine-finance-2026.08.02.2';
 const CORE  = ['./', './index.html', './manifest.webmanifest', './icon.svg'];
 
 self.addEventListener('install', e => {
