@@ -279,6 +279,95 @@ label.fld input:focus,label.fld select:focus,label.fld textarea:focus{
 .dash-sec{color:var(--faint);font-size:12px;letter-spacing:.4px;text-transform:none;margin:22px 2px 10px;font-weight:500}
 .dash-quick{display:flex;flex-wrap:wrap;gap:10px;margin-top:18px}
 
+/* ---------- Dashboard · month strip (replaces the four look-alike stat cards) ---------- */
+.dstrip{display:flex;flex-wrap:wrap;background:var(--panel);border:1px solid var(--line);border-radius:var(--r);overflow:hidden;margin-bottom:20px}
+.dstrip .cell{
+  flex:1 1 158px;padding:15px 18px;display:flex;flex-direction:column;gap:6px;
+  border-inline-start:1px solid var(--line);cursor:pointer;
+  transition:background var(--t-fast) var(--ease-out);
+}
+.dstrip .cell:first-child{border-inline-start:0}
+.dstrip .cell:hover{background:var(--panel2)}
+.dstrip .k{color:var(--muted);font-size:10.5px;letter-spacing:.5px;text-transform:uppercase;font-weight:600}
+.dstrip .v{font-size:21px;font-weight:700;font-variant-numeric:tabular-nums;letter-spacing:-.5px;line-height:1}
+.dstrip .v.gold{color:var(--accent)} .dstrip .v.bad{color:var(--bad)} .dstrip .v.good{color:var(--good)}
+.dstrip small{color:var(--faint);font-size:11px;line-height:1.4}
+
+/* ---------- Dashboard · panels ---------- */
+.dcols{display:grid;grid-template-columns:1.3fr 1fr;gap:14px;align-items:start}
+.dpanel{background:var(--panel);border:1px solid var(--line);border-radius:var(--r);overflow:hidden}
+.dpanel-h{display:flex;align-items:baseline;gap:9px;padding:15px 18px 12px}
+.dpanel-h h3{margin:0;font-size:14.5px;font-weight:600;letter-spacing:-.2px}
+.dpanel-h .hint{color:var(--faint);font-size:11.5px}
+.dpanel-h .tot{margin-inline-start:auto;font-size:17px;font-weight:700;font-variant-numeric:tabular-nums;letter-spacing:-.4px}
+.dpanel-h .tot.gold{color:var(--accent)}
+.dpanel-b{padding:0 18px 16px}
+.dempty{color:var(--faint);font-size:12.5px;line-height:1.6;padding:4px 0 8px}
+
+/* payment pipeline — where the money owed to me currently sits */
+.pipe{display:flex;height:9px;border-radius:99px;overflow:hidden;background:var(--bg2);gap:2px}
+.pipe i{display:block;min-width:4px}
+.pipe i.un{background:var(--muted)} .pipe i.is{background:var(--accent)} .pipe i.od{background:var(--bad)}
+.piperow{display:flex;align-items:center;gap:10px;padding:12px 0;border-top:1px solid var(--line);font-size:13.5px;cursor:pointer;transition:color var(--t-fast) var(--ease-out)}
+.piperow:hover{color:var(--accent)}
+.piperow .sw{width:9px;height:9px;border-radius:3px;flex:0 0 9px}
+.piperow .lbl{flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.piperow .n{color:var(--faint);font-size:11.5px;font-variant-numeric:tabular-nums}
+.piperow .amt{font-variant-numeric:tabular-nums;font-weight:600}
+.arr{display:flex;gap:8px;margin-top:15px;padding-top:15px;border-top:1px solid var(--line)}
+.arr .m{flex:1;background:var(--bg2);border:1px solid var(--line);border-radius:9px;padding:9px 8px;text-align:center;min-width:0}
+.arr .mk{color:var(--faint);font-size:10.5px;text-transform:uppercase;letter-spacing:.4px;font-weight:600}
+.arr .mv{font-size:14px;font-weight:700;font-variant-numeric:tabular-nums;margin-top:3px;letter-spacing:-.3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.arr .m.now{border-color:var(--accent-dim);background:rgba(226,181,95,.06)}
+.arr .m.now .mv{color:var(--accent)}
+.late{margin-top:12px;background:rgba(224,95,86,.09);border:1px solid rgba(224,95,86,.3);border-radius:9px;padding:10px 12px;font-size:12.5px;color:var(--text);line-height:1.5;cursor:pointer}
+.late b{color:var(--bad);font-variant-numeric:tabular-nums}
+
+/* the days ahead */
+.uprow{display:flex;align-items:center;gap:11px;padding:9px 0;border-top:1px solid var(--line);cursor:pointer;transition:opacity var(--t-fast) var(--ease-out)}
+.uprow:first-child{border-top:0}
+.uprow:hover{opacity:.72}
+.upd{flex:0 0 40px;text-align:center;background:var(--bg2);border:1px solid var(--line);border-radius:8px;padding:5px 0}
+.upd b{display:block;font-size:15px;font-weight:700;line-height:1;font-variant-numeric:tabular-nums}
+.upd span{display:block;font-size:9px;color:var(--faint);text-transform:uppercase;letter-spacing:.4px;margin-top:2px}
+.upd.soon{border-color:var(--accent-dim)} .upd.soon b{color:var(--accent)}
+.upn{flex:1;min-width:0}
+.upn .t{font-size:13.5px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.upn .s{color:var(--faint);font-size:11px;margin-top:2px}
+.upa{font-size:13px;font-weight:600;font-variant-numeric:tabular-nums;color:var(--muted)}
+
+/* ---------- Dashboard · project lanes (status derived from the days) ---------- */
+.lane{margin-top:20px}
+.lane-h{display:flex;align-items:center;gap:9px;margin:0 2px 9px;width:100%;background:transparent;border:0;padding:0;color:inherit;font:inherit;text-align:start}
+button.lane-h{cursor:pointer}
+.lane-h .dot{width:7px;height:7px;border-radius:99px;flex:0 0 7px}
+.lane-h .t{font-size:12.5px;font-weight:600;color:var(--text)}
+.lane-h .h{font-size:11.5px;color:var(--faint);min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.lane-h .sum{margin-inline-start:auto;font-size:12.5px;font-variant-numeric:tabular-nums;color:var(--muted);font-weight:600;display:flex;align-items:center;gap:6px;flex-shrink:0}
+.lane-h .chev{display:inline-block;color:var(--faint);transition:transform var(--t-fast) var(--ease-out)}
+.prow{
+  display:grid;grid-template-columns:auto 1fr auto;gap:13px;align-items:center;
+  background:var(--panel);border:1px solid var(--line);border-radius:11px;padding:13px 16px;margin-bottom:8px;
+  cursor:pointer;transition:border-color var(--t-fast) var(--ease-out),transform var(--t-fast) var(--ease-out);
+}
+.prow:hover{border-color:var(--line2);transform:translateY(-1px)}
+.prow:active{transform:scale(.995)}
+.prow .nm{font-size:14px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.prow .meta{color:var(--faint);font-size:11.5px;margin-top:3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.prow .money{text-align:start;white-space:nowrap}
+.prow .money .big{font-size:14.5px;font-weight:700;font-variant-numeric:tabular-nums;letter-spacing:-.3px}
+.prow .money .sub{font-size:11px;margin-top:2px;color:var(--faint);font-variant-numeric:tabular-nums}
+.pbar{height:4px;border-radius:99px;background:var(--bg2);overflow:hidden;margin-top:8px;display:flex}
+.pbar i{display:block;background:var(--good)}
+
+/* the dashboard is read daily — motion stays a quick settle, never a performance */
+@keyframes dIn{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
+.dfade{animation:dIn .22s var(--ease-out) both}
+@media (prefers-reduced-motion: reduce){
+  .dfade{animation:none}
+  .prow,.dstrip .cell,.uprow,.piperow,.lane-h .chev{transition:none}
+}
+
 /* contract list */
 .clist{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:12px}
 .ccard{
@@ -560,6 +649,17 @@ td[title="לחץ לשינוי סטטוס"]:hover .st{border-color:var(--accent-d
   .stats{grid-template-columns:1fr 1fr;gap:10px}
   .stat{padding:14px 15px}
   .dash-quick .btn{flex:1 1 calc(50% - 5px);justify-content:center}
+  /* dashboard v2: strip goes 2-up, panels stack, project rows drop to two rows */
+  .dcols{grid-template-columns:1fr}
+  .dstrip .cell{flex:1 1 50%;min-width:0;padding:13px 14px;border-top:1px solid var(--line)}
+  .dstrip .cell:nth-child(-n+2){border-top:0}
+  .dstrip .cell:nth-child(odd){border-inline-start:0}
+  .dstrip .v{font-size:19px}
+  .arr .m{padding:8px 5px}
+  .arr .mv{font-size:12.5px}
+  .prow{grid-template-columns:auto 1fr;gap:11px;padding:12px 14px}
+  .prow .money{grid-column:2;display:flex;align-items:baseline;gap:8px}
+  .prow .money .sub{margin-top:0}
 }
 </style>
 </head>
@@ -1708,6 +1808,11 @@ function renderWorkdays(){
   // "waiting for payment" = invoice was ISSUED and not yet paid (issued/overdue) — NOT days with no invoice
   else if(_wdFilter==='unpaid' || _wdFilter==='owed') rows=list.filter(w=>(w.status==='issued'||w.status==='overdue') && w.tentative!==true);
   else if(_wdFilter==='toinvoice') rows=list.filter(w=>needsInvoice(w));
+  else if(_wdFilter==='issued') rows=list.filter(w=>w.status==='issued' && w.tentative!==true);
+  else if(_wdFilter==='overdue') rows=list.filter(w=>w.status==='overdue' && w.tentative!==true);
+  // "open" = every day already performed whose money has not landed — invoiced or not
+  else if(_wdFilter==='open'){ const t=new Date().toISOString().slice(0,10);
+    rows=list.filter(w=>w.tentative!==true && (normDate(w.date)||'')<t && (w.status||'unissued')!=='paid'); }
   // ---- dashboard drill-downs: show exactly what the clicked tile counted ----
   else if(_wdFilter==='month'){ const now=new Date(), ym=now.getFullYear()+'-'+String(now.getMonth()+1).padStart(2,'0'); rows=list.filter(w=>(w.date||'').startsWith(ym) && w.tentative!==true); }
   else if(_wdFilter==='upcoming'){ const today=new Date().toISOString().slice(0,10); rows=list.filter(w=>normDate(w.date)>=today); }
@@ -1930,7 +2035,9 @@ function cycleMonthStatus(projId, ym){
   renderWorkdays(); if(sc) sc.scrollTop=top;
 }
 
-const WD_DRILL_LABELS={month:'ימי החודש',owed:'ממתין לתשלום · הופק וטרם שולם',upcoming:'ימים מתוכננים · מהיום והלאה'};
+const WD_DRILL_LABELS={month:'ימי החודש',owed:'ממתין לתשלום · הופק וטרם שולם',upcoming:'ימים מתוכננים · מהיום והלאה',
+  issued:'חשבונית הופקה · ממתין לתשלום',overdue:'באיחור · עבר מועד התשלום',
+  open:'כסף פתוח · בוצע וטרם נגבה'};
 function renderWdFilters(){
   const toInvoiceCount=load(LS.workdays,[]).filter(needsInvoice).length;
   const opts=[['all','הכל'],['confirmed','מאושרים'],['tentative','משוערים'],['unpaid','ממתינים לתשלום'],
@@ -2254,7 +2361,7 @@ function saveProject(){
   closeProjModal();
   if(backWd){ refreshWdProjectOptions(savedId); }
   else if(backSched){ _schedProj=savedId; const p=projectById(savedId); if(p&&p.contractId) _schedContract=p.contractId; renderSchedReview(); }
-  else { renderWorkdays(); }
+  else { refreshView(); }   // project rows live on the dashboard too — re-render whichever view is open
 }
 /* generate N consecutive work days under a project, all inheriting its terms */
 function generateProjectDays(projectId, startISO, count, skipSat){
@@ -2421,7 +2528,7 @@ function deleteProject(id){
   for(const w of wds){ if(w.projectId===id){ w.projectId=null; changed=true; } }
   if(changed) save(LS.workdays,wds);
   closeProjModal();
-  renderWorkdays();
+  refreshView();
 }
 function closeProjModal(){ closeModal('projModal'); _editingProjId=null; _projReturnToWd=false; _projReturnToSched=false; }
 /* ---- projects manager: list ALL projects (even empty ones) with edit/delete ---- */
@@ -2553,6 +2660,44 @@ function calGo(y,m){ _calRef=new Date(y,m,1); closeCalPicker(); renderCalendar()
 function calGoToday(){ _calRef=new Date(); closeCalPicker(); renderCalendar(); }
 
 /* ---------- Dashboard ---------- */
+/* A project's state is DERIVED from its work days — there is no status field to keep in sync.
+   days still ahead → planned/active · all days performed but money open → awaiting · everything paid → done. */
+function projectStats(projId, allDays){
+  const days=(allDays||load(LS.workdays,[])).filter(w=>w.projectId===projId);
+  const today=new Date().toISOString().slice(0,10);
+  let gross=0,paid=0,outstanding=0,tentative=0,future=0,performed=0,minD='',maxD='';
+  for(const w of days){
+    const d=normDate(w.date)||'';
+    if(d){ if(!minD||d<minD) minD=d; if(!maxD||d>maxD) maxD=d; }
+    const amt=computePay(w).total;
+    if(w.tentative===true){ tentative+=amt; if(d>=today) future++; continue; }
+    gross+=amt;
+    if(w.status==='paid') paid+=amt; else outstanding+=amt;
+    if(d>today) future++; else performed++;
+  }
+  let status='empty';
+  if(days.length){
+    if(performed===0 && future>0) status='planned';
+    else if(future>0) status='active';
+    else if(outstanding>0) status='awaiting';
+    else status='done';
+  }
+  return {n:days.length,gross,paid,outstanding,tentative,future,performed,minD,maxD,status};
+}
+const PROJ_LANES=[
+  ['active',  'פעילים',         'נותרו ימי צילום',                  'var(--accent)'],
+  ['awaiting','ממתינים לתשלום', 'הצילומים הסתיימו · הכסף טרם נכנס', 'var(--warn)'],
+  ['planned', 'מתוכננים',       'טרם התחילו',                       'var(--info)'],
+  ['done',    'הושלמו ושולמו',  'סגורים במלואם',                    'var(--good)'],
+];
+let _laneOpen={done:false};   // completed projects stay folded away until asked for
+function toggleLane(k){ _laneOpen[k]=!_laneOpen[k]; renderDashboard(); }
+/* compact "12.8" for date ranges — fmtDate is too long to pair */
+function shortDate(iso){
+  const d=normDate(iso); if(!d) return '';
+  const dt=new Date(d+'T00:00:00'); if(isNaN(dt)) return d;
+  return dt.getDate()+'.'+(dt.getMonth()+1);
+}
 function renderDashboard(){
   const root=document.getElementById('dashRoot'); if(!root) return;
   const contracts=load(LS.contracts,[]);
@@ -2561,13 +2706,12 @@ function renderDashboard(){
   const s=settings();
   const now=new Date(), ym=now.getFullYear()+'-'+String(now.getMonth()+1).padStart(2,'0');
   const todayStr=now.toISOString().slice(0,10);
-  const monthNames=['ינואר','פברואר','מרץ','אפריל','מאי','יוני','יולי','אוגוסט','ספטמבר','אוקטובר','נובמבר','דצמבר'];
+  const monthNames=MONTH_NAMES;
 
   const month=workdays.filter(w=>(w.date||'').startsWith(ym) && w.tentative!==true);
-  let monthExVat=0, owed=0;
+  const monthTent=workdays.filter(w=>(w.date||'').startsWith(ym) && w.tentative===true).length;
+  let monthExVat=0;
   for(const w of month){ monthExVat+=computePay(w).sub; }   // work performed this month only (historical is a yearly sync, not "this month")
-  for(const w of workdays){ if(w.tentative===true) continue; const st=w.status; if(st==='issued'||st==='overdue') owed+=computePay(w).total; }
-  const upcoming=workdays.filter(w=>normDate(w.date)>=todayStr).length;
   const _proj=annualProjection(now.getFullYear());
   const taxM=monthExVat*_proj.effRate, bit=bituachMonthly(monthExVat);   // annual effective rate, not month×12
   const take=Math.max(0, monthExVat-taxM-bit);
@@ -2597,15 +2741,144 @@ function renderDashboard(){
       </div>`
     : `<div class="dash-hero-break"><div class="muted" style="font-size:13px;line-height:1.7">עדיין אין הכנסה החודש. הוסף יום עבודה והמספרים יתחילו לזוז.</div></div>`;
 
-  const tiles=[
-    ['ימי עבודה החודש', month.length, '', '', 'month'],
-    ['ממתין לתשלום', f(owed), 'הופק וטרם שולם', owed>0?'gold':'', 'owed'],
-    ['ימים מתוכננים', upcoming, 'מהיום והלאה', '', 'upcoming'],
-    ['חוזים · פרויקטים', contracts.length+' · '+projects.length, '', '', 'contracts'],
+  // ---- money owed to me, by stage. Work already performed but not yet invoiced counts too. ----
+  let unissued=0,issued=0,overdue=0,nUn=0,nIs=0,nOd=0;
+  for(const w of workdays){
+    if(w.tentative===true) continue;
+    // a day still ahead — or being shot today — is not owed yet. Same cutoff as needsInvoice().
+    if((normDate(w.date)||'')>=todayStr) continue;
+    const st=w.status||'unissued'; if(st==='paid') continue;
+    const amt=computePay(w).total;
+    if(st==='overdue'){ overdue+=amt; nOd++; }
+    else if(st==='issued'){ issued+=amt; nIs++; }
+    else { unissued+=amt; nUn++; }
+  }
+  const owed=unissued+issued+overdue, nOpen=nUn+nIs+nOd;
+
+  // ---- when that open money is expected to land, per payment terms ----
+  const arrivals={}; let lateExpected=0;
+  for(const w of workdays){
+    if(w.tentative===true || w.status==='paid') continue;
+    const e=expectedPayDate(w); if(!e) continue;
+    const amt=computePay(w).total, k=monthKey(e);
+    arrivals[k]=(arrivals[k]||0)+amt;
+    if(k<ym) lateExpected+=amt;
+  }
+  const arrCells=[0,1,2].map(i=>{
+    const d=new Date(now.getFullYear(), now.getMonth()+i, 1);
+    const k=d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0');
+    return {label:monthNames[d.getMonth()], amt:arrivals[k]||0, cur:i===0};
+  });
+
+  // ---- the days ahead ----
+  const upcomingAll=workdays.filter(w=>(normDate(w.date)||'')>=todayStr)
+    .sort((a,b)=>(normDate(a.date)||'').localeCompare(normDate(b.date)||''));
+  const upList=upcomingAll.slice(0,6);
+
+  // ---- one strip instead of four look-alike cards ----
+  const strip=[
+    ['ימי עבודה החודש', month.length, monthTent?monthTent+' משוערים נוספים':'', '', 'month'],
+    ['הכנסה החודש', f(monthExVat), 'לפני מע"מ', '', 'month'],
+    ['ממתין לתשלום', f(owed), nOpen?nOpen+(nOpen===1?' יום פתוח':' ימים פתוחים'):'הכול נגבה', overdue>0?'bad':(owed>0?'gold':'good'), 'open'],
+    ['ימים מתוכננים', upcomingAll.length, upcomingAll.length?'מהיום והלאה':'אין ימים עתידיים', '', 'upcoming'],
   ];
 
+  // ---- panel: where the money owed to me currently sits ----
+  const pipeBar = owed>0 ? `<div class="pipe">
+      ${unissued>0?`<i class="un" style="flex:${unissued}"></i>`:''}
+      ${issued>0?`<i class="is" style="flex:${issued}"></i>`:''}
+      ${overdue>0?`<i class="od" style="flex:${overdue}"></i>`:''}
+    </div>` : '';
+  const pipeRows=[
+    ['var(--muted)','טרם הופקה חשבונית', nUn, unissued, 'toinvoice'],
+    ['var(--accent)','הופקה · ממתין לתשלום', nIs, issued, 'issued'],
+    ['var(--bad)','באיחור', nOd, overdue, 'overdue'],
+  ].filter(r=>r[2]>0).map(([col,lbl,n,amt,kind])=>
+    `<div class="piperow" onclick="dashOpen('${kind}')">
+      <span class="sw" style="background:${col}"></span>
+      <span class="lbl">${lbl}</span><span class="n">${n} ${n===1?'יום':'ימים'}</span>
+      <span class="amt">${f(amt)}</span>
+    </div>`).join('');
+  const lateHtml = lateExpected>0
+    ? `<div class="late" onclick="dashOpen('open')"><b>${f(lateExpected)}</b> היו אמורים להיכנס כבר — לפי תנאי התשלום המועד עבר. שווה בדיקה מול המפיק.</div>` : '';
+  const moneyPanel=`
+    <div class="dpanel dfade" style="animation-delay:60ms">
+      <div class="dpanel-h">
+        <h3>כסף בדרך</h3><span class="hint">מה חייבים לך כרגע</span>
+        <span class="tot ${overdue>0?'':'gold'}"${overdue>0?' style="color:var(--bad)"':''}>${f(owed)}</span>
+      </div>
+      <div class="dpanel-b">
+        ${owed>0 ? pipeBar+pipeRows+lateHtml : '<div class="dempty">אין כסף פתוח — כל מה שבוצע כבר נגבה.</div>'}
+        <div class="arr">${arrCells.map(c=>
+          `<div class="m ${c.cur?'now':''}"><div class="mk">${c.label}</div><div class="mv">${c.amt?f(c.amt):'—'}</div></div>`).join('')}</div>
+        <div class="finnote" style="margin:10px 0 0">"צפוי להיכנס" מחושב מסוף חודש העבודה לפי תנאי התשלום של החוזה. כולל מע"מ.</div>
+      </div>
+    </div>`;
+
+  // ---- panel: the days ahead ----
+  const upHtml = upList.length ? upList.map(w=>{
+    const d=normDate(w.date), dt=new Date(d+'T00:00:00');
+    const diff=Math.round((dt-new Date(todayStr+'T00:00:00'))/86400000);
+    const when = diff===0?'היום':(diff===1?'מחר':'בעוד '+diff+' ימים');
+    return `<div class="uprow" onclick="openWorkday('${w.id}')">
+      <div class="upd ${diff<=2?'soon':''}"><b>${dt.getDate()}</b><span>${monthNames[dt.getMonth()].slice(0,3)}</span></div>
+      <div class="upn">
+        <div class="t">${esc(dayLabel(w)||w.role||'יום עבודה')}${w.tentative?' <span class="faint" style="font-weight:400">· משוער</span>':''}</div>
+        <div class="s">${when}${w.startTime?' · '+esc(w.startTime):''}</div>
+      </div>
+      <div class="upa">${f(computePay(w).total)}</div>
+    </div>`;
+  }).join('') : '<div class="dempty">אין ימים מתוכננים. הוסף יום עבודה, או שבץ ימים מקובץ קריאה.</div>';
+  const upPanel=`
+    <div class="dpanel dfade" style="animation-delay:90ms">
+      <div class="dpanel-h"><h3>הימים הקרובים</h3>
+        ${upcomingAll.length>upList.length?`<span class="hint">מציג ${upList.length} מתוך ${upcomingAll.length}</span>`:''}
+        <span class="tot" style="font-size:13px;color:var(--muted);font-weight:600">${upcomingAll.length} ימים</span>
+      </div>
+      <div class="dpanel-b">${upHtml}</div>
+    </div>`;
+
+  // ---- project lanes, grouped by derived state ----
+  const pstats=projects.map(p=>({p,st:projectStats(p.id,workdays)}));
+  const lanesHtml=PROJ_LANES.map(([key,title,hint,color])=>{
+    const rows=pstats.filter(x=>(x.st.status==='empty'?'planned':x.st.status)===key)
+      .sort((a,b)=>(b.st.maxD||'').localeCompare(a.st.maxD||''));
+    if(!rows.length) return '';
+    const laneTotal=rows.reduce((sum,x)=>sum+(x.st.gross>0?x.st.gross:x.st.tentative),0);
+    const laneOpen = key==='done' ? !!_laneOpen.done : true;
+    const body = laneOpen ? rows.map(({p,st})=>{
+      const range = st.minD ? (st.minD===st.maxD?shortDate(st.minD):shortDate(st.minD)+' – '+shortDate(st.maxD)) : 'טרם שובצו ימים';
+      const money = st.outstanding>0
+        ? `<div class="big" style="color:var(--accent)">${f(st.outstanding)}</div><div class="sub">${st.paid>0?'פתוח · מתוך '+f(st.gross):'טרם שולם'}</div>`
+        : (st.gross>0
+            ? `<div class="big" style="color:var(--good)">${f(st.gross)}</div><div class="sub">שולם במלואו</div>`
+            : `<div class="big" style="color:var(--muted)">${st.tentative>0?f(st.tentative):'—'}</div><div class="sub">${st.tentative>0?'משוער':'ללא ימים'}</div>`);
+      return `<div class="prow" onclick="openProject('${p.id}')">
+        <span class="cdot" style="background:${p.color||'#6b7280'}"></span>
+        <div style="min-width:0">
+          <div class="nm">${esc(p.name||'פרויקט')}${p.client?` <span class="faint" style="font-weight:400">· ${esc(p.client)}</span>`:''}</div>
+          <div class="meta">${st.n?st.n+' '+(st.n===1?'יום':'ימים')+' · ':''}${range}${st.future?' · '+st.future+(st.future===1?' עתידי':' עתידיים'):''}</div>
+          ${st.gross>0?`<div class="pbar"><i style="flex:${Math.max(st.paid,0)}"></i><span style="flex:${Math.max(st.outstanding,0)}"></span></div>`:''}
+        </div>
+        <div class="money">${money}</div>
+      </div>`;
+    }).join('') : '';
+    const head = key==='done'
+      ? `<button class="lane-h" onclick="toggleLane('done')" aria-expanded="${laneOpen}">
+          <span class="dot" style="background:${color}"></span>
+          <span class="t">${title}</span><span class="h">· ${rows.length} ${rows.length===1?'פרויקט':'פרויקטים'}</span>
+          <span class="sum">${f(laneTotal)}<span class="chev" style="transform:rotate(${laneOpen?'-90deg':'90deg'})">›</span></span>
+        </button>`
+      : `<div class="lane-h">
+          <span class="dot" style="background:${color}"></span>
+          <span class="t">${title}</span><span class="h">· ${hint}</span>
+          <span class="sum">${f(laneTotal)}</span>
+        </div>`;
+    return `<div class="lane">${head}${body}</div>`;
+  }).join('');
+
   root.innerHTML=`
-    <div class="dash-hero">
+    <div class="dash-hero dfade">
       <div class="dash-hero-main clickable" onclick="dashOpen('take')" title="פירוט ימי העבודה וההכנסה החודש">
         <div class="k">כמה באמת שלך · ${monthNames[now.getMonth()]}</div>
         <div class="big-num">${f(take)}</div>
@@ -2613,9 +2886,10 @@ function renderDashboard(){
       </div>
       ${heroBreak}
     </div>
-    <div class="dash-sec">החודש במבט מהיר</div>
-    <div class="stats">${tiles.map(([k,v,sub,cls,kind])=>
-      `<div class="stat clickable" onclick="dashOpen('${kind}')"><div class="k">${k}</div><div class="v ${cls||''}">${v}</div>${sub?`<small>${sub}</small>`:''}<span class="stat-go">›</span></div>`).join('')}</div>
+    <div class="dstrip dfade" style="animation-delay:30ms">${strip.map(([k,v,sub,cls,kind])=>
+      `<div class="cell" onclick="dashOpen('${kind}')"><div class="k">${k}</div><div class="v ${cls||''}">${v}</div>${sub?`<small>${sub}</small>`:''}</div>`).join('')}</div>
+    <div class="dcols">${moneyPanel}${upPanel}</div>
+    ${projects.length?`<div class="dash-sec">פרויקטים · לפי מצב</div>${lanesHtml}`:''}
     <div class="dash-quick">
       <button class="btn primary" onclick="openWorkday()">+ יום עבודה</button>
       <button class="btn" onclick="go('calendar')">לוח שנה</button>
@@ -2624,10 +2898,11 @@ function renderDashboard(){
     </div>`;
 }
 /* dashboard panels drill down into the matching detail view */
+const DASH_WD_FILTERS=['month','owed','upcoming','open','issued','overdue','toinvoice'];
 function dashOpen(kind){
   if(kind==='take'){ _finRef=new Date(); go('finance'); }        // take-home → dedicated financial breakdown
   else if(kind==='contracts'){ go('contracts'); }
-  else { _wdView='list'; _wdFilter=(kind==='month'||kind==='owed'||kind==='upcoming')?kind:'all'; go('workdays'); }
+  else { _wdView='list'; _wdFilter=DASH_WD_FILTERS.includes(kind)?kind:'all'; go('workdays'); }
 }
 
 /* ============================================================
