@@ -1009,32 +1009,62 @@ function upsertIncome(month, amountExVat, source, note){
   if(i>=0) list[i]=rec; else list.push(rec);
   setIncome(list); return rec;
 }
+/* Local-date "today". toISOString() is UTC, so between midnight and 03:00 Israel time
+   it returns YESTERDAY — which silently misclassifies a day worked tonight. */
+function todayISO(){ const d=new Date(); return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); }
 /* ---- annual income projection → effective tax rate (income tax is annual, not monthly) ---- */
-function totalIncomeForYear(y){
-  let s=0; for(const w of load(LS.workdays,[])){ if(w.tentative===true) continue; if((w.date||'').startsWith(y+'-')) s+=computePay(w).sub; }
-  return s + historicalIncomeForYear(y);
+/* ONE income figure per month. A historical (Morning) entry is AUTHORITATIVE for its month —
+   it REPLACES the work-day sum instead of adding to it. Adding them double-counted every month
+   that existed in both places, which inflated the annual tax by up to 3.8×. */
+function incomeByMonth(y){
+  const m={};
+  for(const w of load(LS.workdays,[])){
+    if(w.tentative===true) continue;
+    const k=monthKey(w.date); if(!k||!k.startsWith(y+'-')) continue;
+    m[k]=(m[k]||0)+computePay(w).sub;
+  }
+  for(const e of getIncome()){
+    const k=e.month||''; if(!k.startsWith(y+'-')) continue;
+    m[k]=+e.amountExVat||0;          // override, never +=
+  }
+  return m;
 }
+/* months that have BOTH work days and a historical entry — the historical one wins,
+   and the UI warns so the owner knows a figure is being overridden */
+function overlappingIncomeMonths(y){
+  const wdM=new Set();
+  for(const w of load(LS.workdays,[])){ if(w.tentative===true) continue; const k=monthKey(w.date); if(k&&k.startsWith(y+'-')) wdM.add(k); }
+  return getIncome().filter(e=>wdM.has(e.month)).map(e=>e.month);
+}
+function totalIncomeForYear(y){ const m=incomeByMonth(y); let s=0; for(const k in m) s+=m[k]; return s; }
 function annualProjection(y){
   const raw=load(LS.settings,{});
   const override=(raw.annualEstimateByYear && raw.annualEstimateByYear[y]!=null && raw.annualEstimateByYear[y]!=='')? +raw.annualEstimateByYear[y] : null;
-  const now=new Date(), curY=now.getFullYear(), today=now.toISOString().slice(0,10);
-  // average of the up-to-3 prior years that have data
-  const priors=[]; for(let yy=y-1; yy>=y-3; yy--){ const t=totalIncomeForYear(yy); if(t>0) priors.push(t); }
+  const now=new Date(), curY=now.getFullYear(), today=todayISO();
+  // average of the up-to-3 prior COMPLETE years that have data (a partial year would understate)
+  const priors=[]; for(let yy=y-1; yy>=y-3; yy--){ if(yy>=curY) continue; const t=totalIncomeForYear(yy); if(t>0) priors.push(t); }
   const priorAvg = priors.length ? priors.reduce((a,b)=>a+b,0)/priors.length : 0;
   let projected, basis, isOverride=false;
   if(override!=null){ projected=override; basis='הערכה ידנית'; isOverride=true; }
   else if(y<curY){ projected=totalIncomeForYear(y)||priorAvg; basis='נתוני השנה בפועל'; }
   else {
-    const monthsElapsed = (y===curY)? (now.getMonth()+1) : 0;
+    // FRACTIONAL months elapsed. Counting a 1-day-old month as a whole month halved the
+    // run-rate every 1st of the month, so the projected income (and the set-aside advice
+    // built on it) sawtoothed by ~8 points overnight with no change in the data.
+    const dim=new Date(y, now.getMonth()+1, 0).getDate();
+    const monthsElapsed = (y===curY)? (now.getMonth() + now.getDate()/dim) : 0;
     let earned=0, planned=0;
+    const byM=incomeByMonth(y);                      // work days + historical, de-duplicated
     for(const w of load(LS.workdays,[])){
       if(!(w.date||'').startsWith(y+'-')) continue;
       const sub=computePay(w).sub, d=normDate(w.date);
-      if(w.tentative===true){ if(d>today) planned+=sub; }
-      else { if(d>today) planned+=sub; else earned+=sub; }
+      if(d>today) planned+=sub;                      // tentative or not, future work is "planned"
     }
-    earned += historicalIncomeForYear(y);
-    const runMonthly = monthsElapsed>0 ? earned/monthsElapsed : 0;
+    // earned = everything already booked this year, minus the part still in the future
+    for(const k in byM) earned+=byM[k];
+    earned=Math.max(0, earned-planned);
+    // too early in the year to extrapolate from a handful of days — lean on prior years
+    const runMonthly = monthsElapsed>=0.5 ? earned/monthsElapsed : 0;
     const priorMonthly = priorAvg/12;
     const typicalMonthly = (runMonthly>0 && priorMonthly>0) ? (runMonthly+priorMonthly)/2 : (runMonthly||priorMonthly);
     const monthsRemaining = Math.max(0, 12-monthsElapsed);
@@ -1190,13 +1220,22 @@ function fillSettings(){
 }
 function saveSettings(){
   const s=settings();
-  s.vat=+document.getElementById('setVat').value;
-  s.creditPoints=+document.getElementById('setCredits').value;
+  /* A blank field used to store NaN → JSON null → Object.assign overwrote the default with
+     null → (+s.vat||0)/100 = 0% VAT silently, everywhere. Only take a value that is a real
+     number, otherwise keep what was already there. */
+  const num=(id,min,max)=>{ const el=document.getElementById(id); if(!el) return null;
+    const v=+el.value; if(el.value==='' || !Number.isFinite(v)) return null;
+    return Math.min(max, Math.max(min, v)); };
+  const set=(key,id,min,max)=>{ const v=num(id,min,max); if(v!==null) s[key]=v; };
+  set('vat','setVat',0,100);
+  set('creditPoints','setCredits',0,20);
+  set('baseHours','setBase',1,24);
+  set('otTo12','setOtTo12',0,10);
+  set('ot12to13','setOt12to13',0,10);
+  set('otBeyond13Step','setOtStep',0,10);
   s.currency=document.getElementById('setCur').value||'₪';
-  s.baseHours=+document.getElementById('setBase').value;
-  s.otTo12=+document.getElementById('setOtTo12').value; s.ot12to13=+document.getElementById('setOt12to13').value; s.otBeyond13Step=+document.getElementById('setOtStep').value;
   s.apiKey=document.getElementById('setApiKey').value.trim();
-  save(LS.settings,s); refreshKeyPill(); renderTaxTables();
+  save(LS.settings,s); refreshKeyPill(); renderTaxTables(); fillSettings();
   const m=document.getElementById('keySaveMsg'); m.textContent='ההגדרות נשמרו ✓'; setTimeout(()=>m.textContent='',2000);
 }
 function renderTaxTables(){
@@ -1344,7 +1383,7 @@ const EXTRACT_SYS = `אתה עוזר משפטי-פיננסי לצלם קולנו
 let _pendingContract=null;
 function pickContractFile(){ document.getElementById('contractFile').click(); }
 document.getElementById('contractFile').addEventListener('change', e=>{ const f=e.target.files[0]; if(f) learnContract(f); e.target.value=''; });
-document.getElementById('scheduleFile').addEventListener('change', e=>{ const f=e.target.files[0]; if(f) scheduleFromFile(f); e.target.value=''; });
+document.getElementById('scheduleFile').addEventListener('change', e=>{ _schedFilePending=false; const f=e.target.files[0]; if(f) scheduleFromFile(f); e.target.value=''; });
 document.getElementById('incomeFile').addEventListener('change', e=>{ const f=e.target.files[0]; if(f) importIncomeFile(f); e.target.value=''; });
 
 async function learnContract(file){
@@ -1411,7 +1450,7 @@ async function scheduleFromFile(file){
   try{
     if(!settings().apiKey) throw new Error('לא הוגדר מפתח API. עבור להגדרות.');
     const block=await buildContentBlock(file);
-    const today=new Date().toISOString().slice(0,10);
+    const today=todayISO();
     const text=await callClaude(SCHEDULE_SYS,[block,{type:'text',text:'התאריך היום הוא '+today+'. חלץ את ימי הצילום העתידיים כמערך JSON לפי הסכמה.'}],3000);
     const arr=parseJSONArray(text);
     if(!arr) throw new Error('לא הצלחתי לפענח את התשובה כ-JSON.');
@@ -1453,24 +1492,42 @@ function openSchedReview(items){
     if(btnEl) btnEl.textContent='הוסף ללוח';
   }
   renderSchedReview();
+  closeModal('projModal');        // never let the review open behind the project card
   openModal('schedModal');
 }
+/* Pair the file's dates onto the project's existing days. The preview and the write MUST use
+   this one function: they used to filter differently (preview ignored the row checkbox, the
+   write honoured it), so unchecking a row shifted every later pairing by one and dates landed
+   on the WRONG work days — silent corruption of a shoot schedule. */
+function schedPairing(projId){
+  const projDays=load(LS.workdays,[]).filter(w=>w.projectId===projId)
+    .sort((a,b)=>(a.date||'').localeCompare(b.date||''));
+  const target=new Map();        // _schedItems index → existing work day, or null = create new
+  let idx=0;
+  _schedItems.forEach((it,i)=>{
+    if(!it._keep || it._on===false || !it.date) return;
+    target.set(i, projDays[idx]||null); idx++;
+  });
+  return {projDays, target, used:idx};
+}
+/* a row checkbox changed → re-read the form and redraw so the preview keeps telling the truth */
+function schedRowToggled(){ schedReadDom(); renderSchedReview(); }
 function renderSchedReview(){
   const live=_schedItems.filter(it=>it._keep);
 
   // ── UPDATE MODE: diff table (old date → new date) ──────────────────────
   if(_schedUpdateMode && _schedUpdateProjId){
-    const projDays=load(LS.workdays,[]).filter(w=>w.projectId===_schedUpdateProjId)
-      .sort((a,b)=>(a.date||'').localeCompare(b.date||''));
+    const {projDays, target, used}=schedPairing(_schedUpdateProjId);
     const fmt=iso=>{ if(!iso) return '—'; const [y,m,d]=iso.split('-'); return `${d}/${m}/${y}`; };
-    let rows=''; let idx=0;
+    let rows='';
     _schedItems.forEach((it,i)=>{
       if(!it._keep) return;
-      const old=projDays[idx]; idx++;
-      const oldDate=old?fmt(old.date):'יום חדש';
-      const oldStyle=old?'color:var(--muted)':'color:var(--warn)';
-      rows+=`<tr id="schrow-${i}">
-        <td><input type="checkbox" class="sch-on" data-i="${i}" ${it._on!==false?'checked':''} style="width:auto"></td>
+      const off=it._on===false;
+      const old=target.get(i);
+      const oldDate=off?'— מדולג —':(old?fmt(old.date):'יום חדש');
+      const oldStyle=off?'color:var(--faint)':(old?'color:var(--muted)':'color:var(--warn)');
+      rows+=`<tr id="schrow-${i}" style="${off?'opacity:.45':''}">
+        <td><input type="checkbox" class="sch-on" data-i="${i}" ${off?'':'checked'} style="width:auto" onchange="schedRowToggled()"></td>
         <td style="${oldStyle};font-variant-numeric:tabular-nums;white-space:nowrap;font-size:13px">${esc(oldDate)}</td>
         <td style="color:var(--accent);font-size:18px;padding:0 4px;font-weight:300">→</td>
         <td><input type="date" class="sch-f" data-i="${i}" data-k="date" value="${esc(it.date||'')}" style="min-width:140px;font-weight:600;color:var(--text)"></td>
@@ -1478,7 +1535,7 @@ function renderSchedReview(){
         <td><button class="rowdel" title="הסר שורה" onclick="schedRemoveRow(${i})">🗑</button></td>
       </tr>`;
     });
-    const extra=projDays.length>live.length?`<div style="color:var(--warn);font-size:12.5px;margin-top:8px">⚠ הפרויקט מכיל ${projDays.length} ימים; הקובץ הכיל ${live.length}. הימים הנותרים <b>לא ישתנו</b>.</div>`:'';
+    const extra=projDays.length>used?`<div style="color:var(--warn);font-size:12.5px;margin-top:8px">⚠ הפרויקט מכיל ${projDays.length} ימים; נבחרו ${used} תאריכים. הימים הנותרים <b>לא ישתנו</b>.</div>`:'';
     document.getElementById('schedBody').innerHTML=`
       <div class="notice" style="margin-bottom:14px;gap:10px">
         <div>✦ <b>AI חילץ ${live.length} תאריכים חדשים מהקובץ</b> — אלה <em>התאריכים מהתמונה</em>, לא הישנים.</div>
@@ -1562,19 +1619,23 @@ function confirmSchedule(){
   if(!chosen.length){ alert('לא נבחרו ימים.'); return; }
 
   if(_schedUpdateMode && _schedUpdateProjId){
-    // UPDATE existing project days by positional sequence
+    // UPDATE existing project days — pairing comes from the SAME function the preview drew,
+    // so what the user was shown is exactly what gets written
     const list=load(LS.workdays,[]);
-    const projDays=list.filter(w=>w.projectId===_schedUpdateProjId)
-      .sort((a,b)=>(a.date||'').localeCompare(b.date||''));
+    const {target}=schedPairing(_schedUpdateProjId);
     let updated=0, created=0;
-    chosen.forEach((it,idx)=>{
-      if(idx<projDays.length){
-        const wi=list.findIndex(w=>w.id===projDays[idx].id);
+    _schedItems.forEach((it,i)=>{
+      if(!target.has(i)) return;
+      const old=target.get(i);
+      if(old){
+        const wi=list.findIndex(w=>w.id===old.id);
         if(wi>=0){ list[wi].date=normDate(it.date); if(it.callTime) list[wi].startTime=it.callTime; updated++; }
       } else {
         const note=[it.location?('מיקום: '+it.location):'',it.notes||''].filter(Boolean).join(' · ');
+        // honour the same tentative default as a normal import — a callsheet is a plan,
+        // not confirmed income, and booking it as confirmed inflates the tax set-aside
         list.push({id:uid(),projectId:_schedUpdateProjId,date:normDate(it.date),
-          role:_schedRole||'',startTime:it.callTime||null,status:'unissued',tentative:false,notes:note,createdAt:Date.now()});
+          role:_schedRole||'',startTime:it.callTime||null,status:'unissued',tentative:_schedTentative!==false,notes:note,createdAt:Date.now()});
         created++;
       }
     });
@@ -1672,7 +1733,7 @@ function saveReviewedContract(){
   if(i>=0) list[i]=d; else list.push(d);
   save(LS.contracts,list);
   closeModal('reviewModal'); _pendingContract=null;
-  renderContracts();
+  refreshView();   // a contract's terms price every linked day — refresh whatever view is open
 }
 
 /* ---------- Contracts list ---------- */
@@ -1705,10 +1766,35 @@ function renderContracts(){
   host.innerHTML=html;
 }
 function editContract(id){ const c=load(LS.contracts,[]).find(x=>x.id===id); if(c){ _pendingContract=c; openReview(c); } }
+/* Deleting a contract used to silently zero the pay of every day that inherited it:
+   resolveContract returned null → computePay fell back to rate 0 → income, tax and cash flow
+   all dropped with no error and no marker. We now copy the terms onto the affected days first,
+   so the money survives the delete. */
 function deleteContract(id){
-  if(!confirm('למחוק את החוזה?')) return;
-  save(LS.contracts, load(LS.contracts,[]).filter(c=>c.id!==id));
-  renderContracts();
+  const c=contractById(id);
+  const wds=load(LS.workdays,[]), projs=load(LS.projects,[]);
+  const projIds=projs.filter(p=>p.contractId===id).map(p=>p.id);
+  const hit=wds.filter(w=>w.contractId===id || (!w.contractId && projIds.includes(w.projectId)));
+  const msg = hit.length
+    ? `לחוזה "${(c&&c.name)||''}" מקושרים ${hit.length} ימי עבודה.\n\nהתנאים (תעריף, שעות בסיס, מע"מ, תנאי תשלום) יועתקו לימים עצמם כדי שהשכר לא ילך לאיבוד, והחוזה יימחק.\n\nלהמשיך?`
+    : 'למחוק את החוזה?';
+  if(!confirm(msg)) return;
+  if(c && hit.length){
+    for(const w of hit){
+      if(w.dayRate==null && c.dayRate!=null) w.dayRate=c.dayRate;
+      if(w.plusVat==null) w.plusVat=!!c.plusVat;
+      if(w.baseDayHours==null && c.baseDayHours!=null) w.baseDayHours=c.baseDayHours;
+      if(!w.role && c.role) w.role=c.role;
+      if(!w.paymentTerms && c.paymentTerms) w.paymentTerms=c.paymentTerms;
+      if(!w.overtimeModel) w.overtimeModel=otModelOf(c);
+      if(w.overtimeMultiplier==null) w.overtimeMultiplier=otMultOf(c);
+      if(w.contractId===id) w.contractId=null;
+    }
+    save(LS.workdays,wds);
+  }
+  if(projIds.length){ for(const p of projs){ if(p.contractId===id) p.contractId=null; } save(LS.projects,projs); }
+  save(LS.contracts, load(LS.contracts,[]).filter(x=>x.id!==id));
+  refreshView();
 }
 function wireDropzone(){
   const dz=document.getElementById('dz'); if(!dz) return;
@@ -1764,11 +1850,14 @@ function computePay(wd){
   const c=resolveContract(wd);
   const rate = wd.dayRate!=null?+wd.dayRate : (c&&c.dayRate!=null?+c.dayRate:0);
   const plusVat = wd.plusVat!=null?!!wd.plusVat : (c?!!c.plusVat:true);
-  const baseHours = (c&&c.baseDayHours)? +c.baseDayHours : +s.baseHours||10;
+  // day-level value wins over the contract, so a day stays priced correctly even if its
+  // contract is later deleted (deleteContract copies the terms down onto the day)
+  const baseHours = wd.baseDayHours? +wd.baseDayHours : ((c&&c.baseDayHours)? +c.baseDayHours : +s.baseHours||10);
   const hourly = baseHours>0?rate/baseHours:0;
   const worked = +wd.hoursWorked||0;
   const otHours = Math.max(0, worked-baseHours);
-  const otModel = otModelOf(c), otMult = otMultOf(c);
+  const otModel = wd.overtimeModel || otModelOf(c);
+  const otMult = (wd.overtimeMultiplier!=null && wd.overtimeMultiplier!=='') ? +wd.overtimeMultiplier : otMultOf(c);
   let otPay=0;
   if(otHours>0 && worked>0){
     if(otModel==='act'){
@@ -1799,7 +1888,7 @@ let _wdFilter='all', _wdView='list', _wdSort='asc', _wdSel=new Set();
 let _wdOpenGroups=new Set();   // which project groups are expanded in "by project" view (persists across re-render)
 let _wdShowExVat=false;        // toggle: show the pre-VAT amount alongside the incl-VAT amount
 /* a confirmed day whose date has passed but no invoice was issued yet → you still need to invoice it */
-function needsInvoice(w){ return w.tentative!==true && (w.status||'unissued')==='unissued' && normDate(w.date) < new Date().toISOString().slice(0,10); }
+function needsInvoice(w){ return w.tentative!==true && (w.status||'unissued')==='unissued' && normDate(w.date) < todayISO(); }
 function renderWorkdays(){
   const list=load(LS.workdays,[]).slice().sort((a,b)=>{
     const da=normDate(a.date), db=normDate(b.date);
@@ -1821,11 +1910,11 @@ function renderWorkdays(){
   else if(_wdFilter==='issued') rows=list.filter(w=>w.status==='issued' && w.tentative!==true);
   else if(_wdFilter==='overdue') rows=list.filter(w=>w.status==='overdue' && w.tentative!==true);
   // "open" = every day already performed whose money has not landed — invoiced or not
-  else if(_wdFilter==='open'){ const t=new Date().toISOString().slice(0,10);
+  else if(_wdFilter==='open'){ const t=todayISO();
     rows=list.filter(w=>w.tentative!==true && (normDate(w.date)||'')<t && (w.status||'unissued')!=='paid'); }
   // ---- dashboard drill-downs: show exactly what the clicked tile counted ----
   else if(_wdFilter==='month'){ const now=new Date(), ym=now.getFullYear()+'-'+String(now.getMonth()+1).padStart(2,'0'); rows=list.filter(w=>(w.date||'').startsWith(ym) && w.tentative!==true); }
-  else if(_wdFilter==='upcoming'){ const today=new Date().toISOString().slice(0,10); rows=list.filter(w=>normDate(w.date)>=today); }
+  else if(_wdFilter==='upcoming'){ const today=todayISO(); rows=list.filter(w=>normDate(w.date)>=today); }
 
   if(!list.length){
     host.innerHTML=`<div class="empty"><div class="big">☰</div>
@@ -2091,7 +2180,7 @@ function openWorkday(id, presetDate, presetProjectId){
   const contracts=load(LS.contracts,[]);
   const projects=load(LS.projects,[]);
   const w = id? (load(LS.workdays,[]).find(x=>x.id===id)||{}) : {
-    date:presetDate||new Date().toISOString().slice(0,10), status:'unissued', tentative:false,
+    date:presetDate||todayISO(), status:'unissued', tentative:false,
     projectId:presetProjectId||null
   };
   document.getElementById('wdTitle').textContent = id?'עריכת יום עבודה':'יום עבודה חדש';
@@ -2346,7 +2435,7 @@ let _genMode='range';
 function setGenMode(m){ _genMode=m; renderGenSection(); }
 function renderGenSection(){
   const el=document.getElementById('pj_genSection'); if(!el) return;
-  const today=new Date().toISOString().slice(0,10);
+  const today=todayISO();
   const tog=`<div class="viewtog" style="margin-bottom:10px">
     <button class="${_genMode==='range'?'on':''}" onclick="setGenMode('range')">טווח תאריכים</button>
     <button class="${_genMode==='count'?'on':''}" onclick="setGenMode('count')">מספר ימים</button>
@@ -2448,8 +2537,8 @@ function renderProjDaysEditor(projId){
   const days=load(LS.workdays,[]).filter(w=>w.projectId===projId)
     .sort((a,b)=>(a.date||'').localeCompare(b.date||''));
   if(cntEl) cntEl.textContent='· '+days.length+' ימים';
-  const lastDay = days.length? days[days.length-1].date : new Date().toISOString().slice(0,10);
-  const _nd=new Date((lastDay||new Date().toISOString().slice(0,10))+'T00:00:00'); _nd.setDate(_nd.getDate()+1);
+  const lastDay = days.length? days[days.length-1].date : todayISO();
+  const _nd=new Date((lastDay||todayISO())+'T00:00:00'); _nd.setDate(_nd.getDate()+1);
   const nextDate=_nd.getFullYear()+'-'+String(_nd.getMonth()+1).padStart(2,'0')+'-'+String(_nd.getDate()).padStart(2,'0');
   const addBox=`<div class="pde-add"><input type="date" id="pj_quickDate" value="${nextDate}" onkeydown="if(event.key==='Enter'){event.preventDefault();pjQuickAdd();}"><button class="btn sm primary" onclick="pjQuickAdd()">+ הוסף יום</button></div>`;
   if(!days.length){
@@ -2486,7 +2575,7 @@ function pjQuickAdd(){
   let iso = (inp && inp.value) ? normDate(inp.value) : null;
   if(!iso){
     const ex=load(LS.workdays,[]).filter(w=>w.projectId===projId).sort((a,b)=>(a.date||'').localeCompare(b.date||''));
-    const last=ex.length?ex[ex.length-1].date:new Date().toISOString().slice(0,10);
+    const last=ex.length?ex[ex.length-1].date:todayISO();
     const nd=new Date(last+'T00:00:00'); nd.setDate(nd.getDate()+1);
     iso=nd.getFullYear()+'-'+String(nd.getMonth()+1).padStart(2,'0')+'-'+String(nd.getDate()).padStart(2,'0');
   }
@@ -2510,7 +2599,7 @@ function deleteProjDayInline(wdId){
 function addProjDayInline(){
   const projId=_editingProjId; if(!projId) return;
   const days=load(LS.workdays,[]).filter(w=>w.projectId===projId).sort((a,b)=>(a.date||'').localeCompare(b.date||''));
-  const last=days.length?days[days.length-1].date:new Date().toISOString().slice(0,10);
+  const last=days.length?days[days.length-1].date:todayISO();
   const nd=new Date(last+'T00:00:00'); nd.setDate(nd.getDate()+1);
   const iso=nd.getFullYear()+'-'+String(nd.getMonth()+1).padStart(2,'0')+'-'+String(nd.getDate()).padStart(2,'0');
   const list=load(LS.workdays,[]);
@@ -2524,7 +2613,7 @@ function shiftProjDays(){
   const list=load(LS.workdays,[]);
   list.forEach(w=>{
     if(w.projectId!==projId) return;
-    const d=new Date((w.date||new Date().toISOString().slice(0,10))+'T00:00:00');
+    const d=new Date((w.date||todayISO())+'T00:00:00');
     d.setDate(d.getDate()+delta);
     w.date=d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
   });
@@ -2533,25 +2622,48 @@ function shiftProjDays(){
   if(msg){ msg.style.color='var(--good)'; msg.textContent=`✓ כל הימים הוזזו ב-${delta>0?'+':''}${delta} ימים.`; }
 }
 /* AI update mode — import updated dates into an existing project */
-let _schedUpdateMode=false, _schedUpdateProjId=null;
+let _schedUpdateMode=false, _schedUpdateProjId=null, _schedFilePending=false;
 function pickSchedUpdateFile(projId){
-  _schedUpdateMode=true; _schedUpdateProjId=projId;
+  _schedUpdateMode=true; _schedUpdateProjId=projId; _schedFilePending=true;
   closeModal('projModal');
-  function onFocus(){ window.removeEventListener('focus',onFocus); setTimeout(()=>{ if(_schedUpdateMode){ _schedUpdateMode=false; _schedUpdateProjId=null; openProject(projId); } },400); }
+  /* window.focus fires when the OS file dialog closes — for a PICK just as much as a CANCEL.
+     The old guard couldn't tell them apart, so 400ms after picking a file it cancelled update
+     mode and re-opened the project card; the review modal (z-55) then opened behind it (z-60),
+     invisible, AND the import silently fell back to "create new days" instead of updating.
+     Only the change event proves a file was chosen, so we wait for it to clear the flag. */
+  function onFocus(){
+    window.removeEventListener('focus',onFocus);
+    setTimeout(()=>{
+      if(!_schedFilePending) return;          // a file WAS picked — the import owns the flow now
+      _schedFilePending=false; _schedUpdateMode=false; _schedUpdateProjId=null;
+      openProject(projId);                    // genuinely cancelled → restore the project card
+    },600);
+  }
   window.addEventListener('focus',onFocus);
   document.getElementById('scheduleFile').click();
 }
 
 function deleteProjectFromModal(){ if(_editingProjId) deleteProject(_editingProjId); }
+/* Detach a project's days WITHOUT losing their terms. A day with no contractId of its own
+   resolved its rate through the project; nulling projectId alone dropped that link and the
+   day silently repriced to ₪0. Copy the inherited link down first, then detach. */
+function detachProjectDays(id){
+  const p=projectById(id); const wds=load(LS.workdays,[]); let changed=false;
+  for(const w of wds){
+    if(w.projectId!==id) continue;
+    if(!w.contractId && p && p.contractId) w.contractId=p.contractId;
+    if(!w.client && p && p.client) w.client=p.client;
+    w.projectId=null; changed=true;
+  }
+  if(changed) save(LS.workdays,wds);
+  return changed;
+}
 function deleteProject(id){
   const used=load(LS.workdays,[]).filter(w=>w.projectId===id).length;
   const msg=used? `לפרויקט מקושרים ${used} ימי עבודה. הם יישארו אך ינותקו מהפרויקט. למחוק?` : 'למחוק את הפרויקט?';
   if(!confirm(msg)) return;
+  detachProjectDays(id);
   save(LS.projects, load(LS.projects,[]).filter(p=>p.id!==id));
-  // detach workdays
-  const wds=load(LS.workdays,[]); let changed=false;
-  for(const w of wds){ if(w.projectId===id){ w.projectId=null; changed=true; } }
-  if(changed) save(LS.workdays,wds);
   closeProjModal();
   refreshView();
 }
@@ -2580,8 +2692,8 @@ function deleteProjectFromManager(id){
   const p=projectById(id);
   const msg=used? `לפרויקט "${(p&&p.name)||''}" מקושרים ${used} ימי עבודה. הימים יישארו אך ינותקו מהפרויקט. למחוק?` : `למחוק את הפרויקט "${(p&&p.name)||''}"?`;
   if(!confirm(msg)) return;
+  detachProjectDays(id);
   save(LS.projects, load(LS.projects,[]).filter(x=>x.id!==id));
-  const wds=load(LS.workdays,[]); let ch=false; wds.forEach(w=>{ if(w.projectId===id){ w.projectId=null; ch=true; } }); if(ch) save(LS.workdays,wds);
   renderProjectsManager(); refreshView();
 }
 /* reveal the inline "name a new project" field (from the + חדש button) */
@@ -2628,7 +2740,7 @@ function renderCalendar(){
   let html=dow.map(d=>`<div class="caldow">${d}</div>`).join('');
 
   const start=new Date(ref); start.setDate(1-ref.getDay()); // back to Sunday
-  const todayStr=new Date().toISOString().slice(0,10);
+  const todayStr=todayISO();
   for(let i=0;i<42;i++){
     const d=new Date(start); d.setDate(start.getDate()+i);
     const iso=d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
@@ -2689,7 +2801,7 @@ function calGoToday(){ _calRef=new Date(); closeCalPicker(); renderCalendar(); }
    days still ahead → planned/active · all days performed but money open → awaiting · everything paid → done. */
 function projectStats(projId, allDays){
   const days=(allDays||load(LS.workdays,[])).filter(w=>w.projectId===projId);
-  const today=new Date().toISOString().slice(0,10);
+  const today=todayISO();
   let gross=0,paid=0,outstanding=0,tentative=0,future=0,performed=0,minD='',maxD='';
   for(const w of days){
     const d=normDate(w.date)||'';
@@ -2938,16 +3050,25 @@ let _finRef=new Date();
 function finMove(d){ _finRef=new Date(_finRef.getFullYear(), _finRef.getMonth()+d, 1); renderFinance(); }
 function finToday(){ _finRef=new Date(); renderFinance(); }
 /* ---- cash-flow: when a day's payment is expected, from end-of-work-month + terms ---- */
+/* paymentTerms is free text written by the contract-learning AI, so a bare "first number
+   wins" grabbed clause numbers: "לפי סעיף 16 להסכם — שוטף+30" parsed as 16 days, shifting
+   a payment forecast by two weeks. Prefer the "+N" form, then an explicit day-count. */
 function parsePaymentTermsDays(t){
   if(!t) return 30;                    // sensible default when the contract doesn't specify
-  const s=String(t); const m=s.match(/(\d+)/);
-  if(m) return +m[1];
-  if(/מיידי/.test(s)) return 0;
+  const s=String(t);
+  if(/מיידי|מיידית/.test(s) && !/\d/.test(s)) return 0;
+  const m = s.match(/[+＋]\s*(\d{1,3})/)                       // שוטף+30
+         || s.match(/(\d{1,3})\s*(?:ימים|יום|days)/)           // תוך 45 ימים
+         || s.match(/\b(\d{1,3})\b/);                          // last resort: any small number
+  if(m) return Math.min(180, Math.max(0, +m[1]));
   return 30;
 }
 function expectedPayDate(w){
-  const d=normDate(w.date); if(!d) return null;
-  const c=resolveContract(w); const days=parsePaymentTermsDays(c && c.paymentTerms);
+  const d=normDate(w.date);
+  // an unparseable date used to yield the string "NaN-NaN-NaN", which matched no month and
+  // silently dropped the day out of every cash-flow figure with no error
+  if(!/^\d{4}-\d{2}-\d{2}$/.test(d||'')) return null;
+  const c=resolveContract(w); const days=parsePaymentTermsDays(w.paymentTerms || (c && c.paymentTerms));
   const [y,mo]=d.split('-').map(Number);
   const dt=new Date(y, mo, 0);         // last day of the work month (mo is 1-based → 0-day of next month)
   dt.setDate(dt.getDate()+days);
@@ -3256,8 +3377,21 @@ function importData(file){
    out to layers 1+2 (debounced).
    ============================================================ */
 function dumpData(){ const d={_app:'cine-finance',_v:1,_savedAt:new Date().toISOString()}; Object.values(LS).forEach(k=>d[k]=load(k,null)); return d; }
-/* "empty" = no real business data yet (settings/apiKey alone don't count) */
-function isEmptyData(d){ d=d||{}; return ['cf_contracts','cf_projects','cf_workdays','cf_expenses'].every(k=>!Array.isArray(d[k])||d[k].length===0); }
+/* "empty" = no real business data yet (settings/apiKey alone don't count).
+   Data-driven over LS so a key added later is covered for free. This decides WHICH SIDE WINS
+   on login: the old hard-coded list omitted cf_income and cf_signer, so a device holding only
+   imported Morning history + a saved signature looked "empty" and got overwritten. */
+function isEmptyData(d){
+  d=d||{};
+  return Object.values(LS).every(k=>{
+    if(k===LS.settings) return true;            // settings/API key alone is not business data
+    const v=d[k];
+    if(v==null) return true;
+    if(Array.isArray(v)) return v.length===0;
+    if(typeof v==='object') return Object.keys(v).length===0;
+    return !v;
+  });
+}
 let _suppressBackup=false;
 function applyData(d){ _suppressBackup=true; try{ Object.values(LS).forEach(k=>{ if(d[k]!=null) localStorage.setItem(k, JSON.stringify(d[k])); }); } finally { _suppressBackup=false; } }
 
@@ -3320,7 +3454,7 @@ async function restoreFromFile(){
 
 /* --- layer 2: rotating daily snapshots in IndexedDB --- */
 async function maybeSnapshot(){
-  const today=new Date().toISOString().slice(0,10);
+  const today=todayISO();
   let snaps=(await idbGet('snapshots'))||[];
   const payload=JSON.stringify(dumpData());
   if(snaps.length && snaps[snaps.length-1].day===today){ snaps[snaps.length-1]={day:today,at:Date.now(),data:payload}; }
