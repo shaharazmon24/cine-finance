@@ -258,6 +258,14 @@ label.fld input:focus,label.fld select:focus,label.fld textarea:focus{
 .fin-two-v.gold{color:var(--accent)}
 .finnote{color:var(--muted);font-size:12px;line-height:1.6;margin:10px 0}
 .fin-sub-h{margin:16px 0 2px;font-size:12px;font-weight:600;color:var(--muted)}
+/* expenses list */
+.exp-row{display:flex;align-items:center;gap:12px;padding:11px 0;border-top:1px solid var(--line);cursor:pointer;transition:opacity var(--t-fast) var(--ease-out)}
+.exp-row:first-child{border-top:0}
+.exp-row:hover{opacity:.75}
+.exp-d{flex:0 0 40px;text-align:center;background:var(--bg2);border:1px solid var(--line);border-radius:8px;padding:5px 0}
+.exp-d b{display:block;font-size:15px;font-weight:700;line-height:1;font-variant-numeric:tabular-nums}
+.exp-d span{display:block;font-size:9px;color:var(--faint);text-transform:uppercase;letter-spacing:.4px;margin-top:2px}
+.exp-nm{font-size:13.5px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 /* The two clocks. The single thing that confuses people about freelance money: the month you
    WORKED and the month the money ARRIVES are never the same month. Give each its own panel. */
 .clocks{display:grid;grid-template-columns:1fr 1fr;gap:13px;margin-bottom:8px}
@@ -774,7 +782,7 @@ td[title="לחץ לשינוי סטטוס"]:hover .st{border-color:var(--accent-d
 
       <!-- EXPENSES -->
       <section class="view" id="view-expenses">
-        <div class="empty"><div class="big">↧</div><div>הוצאות ומע"מ תשומות — בקרוב.</div></div>
+        <div id="expRoot"></div>
       </section>
 
       <!-- SETTINGS -->
@@ -989,6 +997,19 @@ td[title="לחץ לשינוי סטטוס"]:hover .st{border-color:var(--accent-d
 <input type="file" id="incomeFile" accept="application/pdf,image/*,.xlsx,.xls,.csv" style="display:none">
 <input type="file" id="signFile" accept="application/pdf" style="display:none">
 
+<!-- Expense add/edit modal -->
+<div class="modal-bg" id="expModal" style="z-index:60">
+  <div class="modal" style="width:min(620px,100%)">
+    <div class="modal-head"><h2 id="expTitle">הוצאה</h2><button class="x" onclick="closeModal('expModal')">×</button></div>
+    <div class="modal-body" id="expBody"></div>
+    <div class="modal-foot">
+      <button class="btn primary" onclick="saveExpense()">שמור הוצאה</button>
+      <button class="btn ghost" onclick="closeModal('expModal')">ביטול</button>
+      <button class="btn ghost" id="expDelBtn" style="margin-inline-start:auto;color:var(--bad)" onclick="deleteExpenseFromModal()">מחק</button>
+    </div>
+  </div>
+</div>
+
 <!-- Historical income (manual add / Morning-import review) modal -->
 <div class="modal-bg" id="incomeModal" style="z-index:60">
   <div class="modal" style="width:min(560px,100%)">
@@ -1053,6 +1074,65 @@ function overlappingIncomeMonths(y){
   return getIncome().filter(e=>wdM.has(e.month)).map(e=>e.month);
 }
 function totalIncomeForYear(y){ const m=incomeByMonth(y); let s=0; for(const k in m) s+=m[k]; return s; }
+
+/* ---- EXPENSES (הוצאות ומע"מ תשומות) ---------------------------------------------------
+   Two separate jobs per expense:
+   1. the net (ex-VAT) part reduces taxable PROFIT for income tax + Bituach Leumi
+   2. the VAT part is מע"מ תשומות — reclaimable against the VAT you collected
+   Israeli law limits both for some categories (a private car used for work is the classic
+   case: 45% of the cost, two thirds of the VAT), so each category carries its own defaults
+   and every expense can still override them. */
+const EXPENSE_CATS=[
+  ['gear',     'ציוד וצילום',                  100,100],
+  ['rental',   'השכרת ציוד',                   100,100],
+  ['vehicle',  'רכב, דלק וחניה',                45, 66],
+  ['travel',   'נסיעות והוצאות בצילומים',      100,100],
+  ['software', 'תוכנה, מנויים ואחסון',         100,100],
+  ['phone',    'טלפון ואינטרנט',                50, 50],
+  ['insurance','ביטוח מקצועי וציוד',           100,100],
+  ['office',   'משרד וציוד מתכלה',             100,100],
+  ['prof',     'רואה חשבון, עו"ד, ייעוץ',      100,100],
+  ['edu',      'השתלמות, קורסים וספרות',       100,100],
+  ['hosting',  'כיבוד ואירוח',                  80,  0],
+  ['other',    'אחר',                          100,100],
+];
+function expenseCat(k){ return EXPENSE_CATS.find(c=>c[0]===k) || EXPENSE_CATS[EXPENSE_CATS.length-1]; }
+function getExpenses(){ return load(LS.expenses,[]); }
+function setExpenses(l){ save(LS.expenses,l); }
+function computeExpense(e){
+  const s=settings();
+  const amount=+e.amount||0;
+  const {sub,vat}=splitVat(amount, e.vatMode||'included', s.vat);
+  const cat=expenseCat(e.category);
+  const dPct=(e.deductPct!=null&&e.deductPct!=='')?+e.deductPct:cat[2];
+  const vPct=(e.vatReclaimPct!=null&&e.vatReclaimPct!=='')?+e.vatReclaimPct:cat[3];
+  return { amount, net:sub, vat, deductible:sub*dPct/100, vatCredit:vat*vPct/100, dPct, vPct };
+}
+function expensesInRange(pred){
+  let amount=0, net=0, vat=0, deductible=0, vatCredit=0, n=0; const byCat={};
+  for(const e of getExpenses()){
+    if(!pred(e)) continue;
+    const c=computeExpense(e);
+    amount+=c.amount; net+=c.net; vat+=c.vat; deductible+=c.deductible; vatCredit+=c.vatCredit; n++;
+    byCat[e.category||'other']=(byCat[e.category||'other']||0)+c.amount;
+  }
+  return { amount, net, vat, deductible, vatCredit, n, byCat };
+}
+function expensesForYear(y){ return expensesInRange(e=>(normDate(e.date)||'').startsWith(y+'-')); }
+function expensesForMonth(ym){ return expensesInRange(e=>monthKey(e.date)===ym); }
+function deductibleExpensesForYear(y){ return expensesForYear(y).deductible; }
+/* Bituach Leumi over a year, month by month (it is banded and capped monthly, so a single
+   annual figure would under-charge) */
+function bituachAnnual(perMonthProfit){ let s=0; for(const p of perMonthProfit) s+=bituachMonthly(p); return s; }
+/* The full self-employed package for a year's profit.
+   52% of the Bituach Leumi paid is itself deductible from taxable income (Israeli law), which
+   the engine previously ignored — over-provisioning income tax by roughly ₪2,400 on ₪180k. */
+function taxPackage(profit, perMonthProfit){
+  const bit=bituachAnnual(perMonthProfit && perMonthProfit.length ? perMonthProfit : Array(12).fill(Math.max(0,profit)/12));
+  const taxable=Math.max(0, profit - 0.52*bit);
+  const tax=incomeTaxNetAnnual(taxable);
+  return { profit, bit, taxable, tax, take:Math.max(0, profit-tax-bit) };
+}
 function annualProjection(y){
   const raw=load(LS.settings,{});
   const override=(raw.annualEstimateByYear && raw.annualEstimateByYear[y]!=null && raw.annualEstimateByYear[y]!=='')? +raw.annualEstimateByYear[y] : null;
@@ -1090,8 +1170,20 @@ function annualProjection(y){
     basis = parts.length ? 'לפי '+parts.join(' + ') : 'אין עדיין מספיק נתונים';
   }
   projected=Math.max(0, projected||0);
-  const tax = incomeTaxNetAnnual(projected);
-  return { projected, tax, effRate: projected>0? tax/projected : 0, basis, priorAvg, isOverride };
+  /* Income tax and Bituach Leumi are charged on PROFIT, not turnover. Expenses to date are
+     scaled to a full year the same way income is, so the effective rate reflects the business
+     as it actually runs rather than its gross billings. */
+  /* Expenses are counted as ACTUALLY RECORDED, never extrapolated. Scaling a one-off capital
+     purchase (a camera in March) across the whole year would invent expenses that never happen
+     and under-provision the tax. This errs toward setting aside slightly too much, which is the
+     safe direction for a set-aside tool — the figure improves as real expenses get entered. */
+  const projectedExpenses=deductibleExpensesForYear(y);
+  const profit=Math.max(0, projected-projectedExpenses);
+  const pkg=taxPackage(profit);
+  return { projected, expenses:projectedExpenses, profit,
+           tax:pkg.tax, bit:pkg.bit,
+           effRate: profit>0? pkg.tax/profit : 0,     // applied to monthly PROFIT
+           basis, priorAvg, isOverride };
 }
 function saveAnnualEstimate(y, val){
   const raw=load(LS.settings,{});
@@ -1177,6 +1269,7 @@ function go(v){
   if(v==='workdays') renderWorkdays();
   if(v==='calendar') renderCalendar();
   if(v==='finance') renderFinance();
+  if(v==='expenses') renderExpenses();
   if(v==='sign') renderSigner();
   if(v==='settings') fillSettings();
 }
@@ -1376,8 +1469,8 @@ const EXTRACT_SYS = `אתה עוזר משפטי-פיננסי לצלם קולנו
  "channel": "ערוץ/גוף משדר/לקוח אם מופיע",
  "project": "שם ההפקה/התכנית אם מופיע",
  "role": "תפקיד איש הצוות אם מופיע",
- "dayRate": מספר או null (התעריף היומי בש\\"ח, בלי מע\\"מ; אם כתוב 'בתוספת מע\\"מ' ציין plusVat),
- "plusVat": true/false (האם התעריף הוא לפני מע\\"מ),
+ "dayRate": מספר או null (התעריף היומי בש\\"ח כפי שכתוב בחוזה),
+ "vatMode": "plus" אם כתוב 'בתוספת מע\\"מ' / 'לפני מע\\"מ' · "included" אם כתוב 'כולל מע\\"מ' · "exempt" אם החוזה פטור ממע\\"מ. ברירת מחדל "plus",
  "currency": "₪ כברירת מחדל",
  "baseDayHours": מספר או null (אורך יום צילום סטנדרטי בשעות לפי החוזה — למשל 10 / 11 / 11.5 / 12. קריטי לחישוב שעות נוספות),
  "baseDayHoursFriEve": מספר או null (אורך יום בשישי/ערב חג),
@@ -1704,7 +1797,8 @@ function openReview(data){
     html+=`<label class="fld">${lbl}<input data-k="${k}" type="${t}" value="${esc(v)}"></label>`;
   }
   html+='</div>';
-  html+=`<label class="fld" style="margin-top:12px"><span class="row" style="gap:8px"><input type="checkbox" data-k="plusVat" ${data.plusVat?'checked':''} style="width:auto"> התעריף הוא לפני מע"מ (יתווסף מע"מ ${settings().vat}%)</span></label>`;
+  html+=`<label class="fld" style="margin-top:12px">מע"מ על התעריף
+    <select data-k="vatMode">${VAT_MODES.map(([k,l])=>`<option value="${k}" ${vatModeOf(null,data)===k?'selected':''}>${l}</option>`).join('')}</select></label>`;
   const otmVal = data.overtimeModel || (String(data.type||'').includes('ACT')?'act':'flat');
   const otMultVal = data.overtimeMultiplier!=null?data.overtimeMultiplier:1;
   html+=`<div class="notice" style="margin-top:12px">
@@ -1766,7 +1860,8 @@ function renderContracts(){
   }
   let html='<div class="clist">';
   for(const c of list){
-    const rate=c.dayRate!=null?fmtMoney(c.dayRate)+(c.plusVat?' +מע"מ':''):'—';
+    const vm=vatModeOf(null,c);
+    const rate=c.dayRate!=null?fmtMoney(c.dayRate)+(vm==='plus'?' +מע"מ':(vm==='included'?' כולל מע"מ':'')):'—';
     const isAct=(c.type||'').includes('ACT');
     html+=`<div class="ccard">
       <button class="del" title="מחק" onclick="deleteContract('${c.id}')">🗑</button>
@@ -1798,7 +1893,7 @@ function deleteContract(id){
   if(c && hit.length){
     for(const w of hit){
       if(w.dayRate==null && c.dayRate!=null) w.dayRate=c.dayRate;
-      if(w.plusVat==null) w.plusVat=!!c.plusVat;
+      if(!w.vatMode && w.plusVat==null) w.vatMode=vatModeOf(null,c);
       if(w.baseDayHours==null && c.baseDayHours!=null) w.baseDayHours=c.baseDayHours;
       if(!w.role && c.role) w.role=c.role;
       if(!w.paymentTerms && c.paymentTerms) w.paymentTerms=c.paymentTerms;
@@ -1860,12 +1955,40 @@ function otModelOf(c){
 }
 function otMultOf(c){ return (c && c.overtimeMultiplier!=null && c.overtimeMultiplier!=='') ? +c.overtimeMultiplier : 1; }
 
+/* ---- How a fee relates to VAT ----------------------------------------------------------
+   The old boolean could only say "add VAT on top" or "no VAT at all". A fee agreed as
+   "כולל מע"מ" — very common with private clients — fell into the second case, so the app
+   recorded the whole sum as taxable income (overstated by 18%) and showed ₪0 VAT owed on it,
+   hiding a real liability before the bi-monthly return.
+   Legacy rows are read through their old meaning and are NOT silently reinterpreted:
+   plusVat:true → 'plus', plusVat:false → 'exempt'. Choosing 'included' is an explicit act. */
+const VAT_MODES=[
+  ['plus',    'לפני מע"מ — יתווסף מע"מ'],
+  ['included','כולל מע"מ — זה הסכום הסופי'],
+  ['exempt',  'ללא מע"מ — פטור'],
+];
+function vatModeOf(wd, c){
+  if(wd && wd.vatMode) return wd.vatMode;
+  if(wd && wd.plusVat!=null) return wd.plusVat?'plus':'exempt';
+  if(c && c.vatMode) return c.vatMode;
+  if(c && c.plusVat!=null) return c.plusVat?'plus':'exempt';
+  return 'plus';
+}
+function vatModeLabel(m){ const f=VAT_MODES.find(x=>x[0]===m); return f?f[1]:m; }
+/* split a gross amount into net + VAT according to the mode */
+function splitVat(amount, mode, vatPct){
+  const r=(+vatPct||0)/100;
+  if(mode==='included'){ const net=amount/(1+r); return {sub:net, vat:amount-net}; }
+  if(mode==='exempt')  return {sub:amount, vat:0};
+  return {sub:amount, vat:amount*r};
+}
+
 /* Core pay calculator → returns a full breakdown */
 function computePay(wd){
   const s=settings();
   const c=resolveContract(wd);
   const rate = wd.dayRate!=null?+wd.dayRate : (c&&c.dayRate!=null?+c.dayRate:0);
-  const plusVat = wd.plusVat!=null?!!wd.plusVat : (c?!!c.plusVat:true);
+  const vatMode = vatModeOf(wd, c);
   // day-level value wins over the contract, so a day stays priced correctly even if its
   // contract is later deleted (deleteContract copies the terms down onto the day)
   const baseHours = wd.baseDayHours? +wd.baseDayHours : ((c&&c.baseDayHours)? +c.baseDayHours : +s.baseHours||10);
@@ -1891,11 +2014,11 @@ function computePay(wd){
     } // 'none' → otPay stays 0
   }
   const gear=+wd.gearRental||0, travel=+wd.travel||0, other=+wd.otherAdd||0;
-  const sub = rate + otPay + gear + travel + other;
-  const vat = plusVat? sub*((+s.vat||0)/100) : 0;
+  const agreed = rate + otPay + gear + travel + other;   // the figure actually agreed with the client
+  const {sub, vat} = splitVat(agreed, vatMode, s.vat);
   return {
-    rate, plusVat, baseHours, hourly, worked, otHours, otModel, otMult,
-    otPay, gear, travel, other, sub, vat, total:sub+vat,
+    rate, vatMode, plusVat: vatMode==='plus', baseHours, hourly, worked, otHours, otModel, otMult,
+    otPay, gear, travel, other, agreed, sub, vat, total:sub+vat,
     contractName: c?c.name:null
   };
 }
@@ -1961,10 +2084,10 @@ function wdRowHtml(w,{showName=true, sel=false, noStatus=false}={}){
   const selCell = sel? `<td onclick="event.stopPropagation()"><input type="checkbox" class="wd-sel" data-id="${w.id}" ${_wdSel.has(w.id)?'checked':''} onclick="wdToggleSel('${w.id}',this.checked)" style="width:auto"></td>` : '';
   const needDot = needsInvoice(w)? `<span class="need-dot" title="עבר תאריך — טרם הופקה חשבונית">●</span> ` : '';
   const statusCell = noStatus? '' : `<td onclick="event.stopPropagation();cycleStatus('${w.id}')" style="cursor:pointer" title="לחץ לשינוי סטטוס">${needDot}${st}</td>`;
-  const showEx = _wdShowExVat && p.plusVat;
+  const showEx = _wdShowExVat && p.vat>0;
   const grossCell = showEx
     ? `${fmtMoney(Math.round(p.sub))}<span class="faint" style="font-weight:400"> לפני מע"מ</span><div class="faint" style="font-size:11.5px;font-weight:400">${fmtMoney(Math.round(p.total))} כולל מע"מ</div>`
-    : `${fmtMoney(Math.round(p.total))}${p.plusVat?'<span class="faint" style="font-weight:400"> כולל מע"מ</span>':''}`;
+    : `${fmtMoney(Math.round(p.total))}${p.vat>0?'<span class="faint" style="font-weight:400"> כולל מע"מ</span>':''}`;
   const roleTxt = esc(w.role || dayLabelRole(w) || '—');
   return `<tr onclick="openWorkday('${w.id}')">
     ${selCell}
@@ -2002,10 +2125,10 @@ function wdCardHtml(w,{showName=true, noStatus=false}={}){
   const stEl = noStatus? '' : `<span onclick="event.stopPropagation();cycleStatus('${w.id}')" style="cursor:pointer" title="לחץ לשינוי">${st}</span>`;
   const nameLine=showName?`<div class="wd-card-name">${dot} ${esc(dayLabel(w)||'—')}</div>`:'';
   const needDot = needsInvoice(w)? `<span class="need-dot" title="עבר תאריך — טרם הופקה חשבונית">●</span> ` : '';
-  const showEx = _wdShowExVat && p.plusVat;
+  const showEx = _wdShowExVat && p.vat>0;
   const grossCard = showEx
     ? `${fmtMoney(Math.round(p.sub))} <span class="faint">לפני מע"מ</span><span class="faint" style="font-size:11px"> · ${fmtMoney(Math.round(p.total))} כולל</span>`
-    : `${fmtMoney(Math.round(p.total))}${p.plusVat?' <span class="faint">כולל מע"מ</span>':''}`;
+    : `${fmtMoney(Math.round(p.total))}${p.vat>0?' <span class="faint">כולל מע"מ</span>':''}`;
   return `<div class="wd-card" onclick="openWorkday('${w.id}')">
     <div class="wd-card-top">
       <label onclick="event.stopPropagation()" style="display:flex"><input type="checkbox" class="wd-sel" data-id="${w.id}" ${_wdSel.has(w.id)?'checked':''} onclick="wdToggleSel('${w.id}',this.checked)" style="width:auto"></label>
@@ -2259,7 +2382,9 @@ function openWorkday(id, presetDate, presetProjectId){
       <label class="fld">סטטוס תשלום<select id="wd_status">${stOpts}</select></label>
     </div>
     <label class="fld" style="margin-top:12px"><span class="row" style="gap:8px">
-      <input type="checkbox" id="wd_plusvat" ${ (w.plusVat!=null?w.plusVat:(_inhC&&_inhC.plusVat!=null?_inhC.plusVat:true))?'checked':''} style="width:auto" onchange="renderWdPreview()"> התעריף לפני מע"מ (יתווסף מע"מ ${settings().vat}%)
+      <select id="wd_vatmode" onchange="renderWdPreview()" style="max-width:260px">${
+        VAT_MODES.map(([k,l])=>`<option value="${k}" ${vatModeOf(w,_inhC)===k?'selected':''}>${l}</option>`).join('')}</select>
+      <span class="faint" style="font-size:11.5px">מע"מ ${settings().vat}% · "כולל" מחלץ את המע"מ מתוך הסכום</span>
     </span></label>
     <label class="fld" style="margin-top:10px"><span class="row" style="gap:8px">
       <input type="checkbox" id="wd_tentative" ${w.tentative?'checked':''} style="width:auto"> יום משוער / טנטטיבי (לא סופי — לא נספר בהכנסה בפועל)
@@ -2286,7 +2411,7 @@ function onWdProjectChange(){
     const clientEl=document.getElementById('wd_client'); clientEl.placeholder=p.client||'ברירת מחדל מהפרויקט';
     const c=p.contractId?contractById(p.contractId):null;
     if(c){
-      if(c.plusVat!=null) document.getElementById('wd_plusvat').checked=!!c.plusVat;
+      document.getElementById('wd_vatmode').value=vatModeOf(null,c);
       const roleEl=document.getElementById('wd_role'); if(c.role && !roleEl.value) roleEl.value=c.role;
     }
   }
@@ -2296,7 +2421,7 @@ function onWdContractChange(){
   const cid=document.getElementById('wd_contract').value;
   const c=cid?contractById(cid):null;
   if(c){
-    if(c.plusVat!=null) document.getElementById('wd_plusvat').checked=!!c.plusVat;
+    document.getElementById('wd_vatmode').value=vatModeOf(null,c);
     const roleEl=document.getElementById('wd_role'); if(c.role && !roleEl.value) roleEl.value=c.role;
   }
   renderWdPreview();
@@ -2328,7 +2453,7 @@ function readWdForm(){
     client:v('wd_client'), role:v('wd_role'),
     dayRate:num('wd_rate'), startTime:v('wd_start')||null, endTime:v('wd_end')||null, hoursWorked:num('wd_hours'),
     gearRental:num('wd_gear'), ring:v('wd_ring')||null, travel:num('wd_travel'), otherAdd:num('wd_other'),
-    plusVat:document.getElementById('wd_plusvat').checked,
+    vatMode:document.getElementById('wd_vatmode').value,
     tentative:document.getElementById('wd_tentative').checked,
     status:v('wd_status'), notes:v('wd_notes')
   };
@@ -2344,7 +2469,7 @@ function renderWdPreview(){
   lines+=`<div class="ln"><span>סה"כ לפני מע"מ</span><span class="num">${f(p.sub)}</span></div>`;
   if(p.vat>0) lines+=`<div class="ln"><span>מע"מ ${settings().vat}%</span><span class="num">${f(p.vat)}</span></div>`;
   lines+=`<div class="ln tot"><span>סה"כ בחשבונית</span><span class="num">${f(p.total)}</span></div>`;
-  document.getElementById('wdPreview').innerHTML=`<div class="faint" style="font-size:12px;margin:14px 0 4px">חישוב שכר אוטומטי${p.contractName?' · לפי חוזה "'+esc(p.contractName)+'"':''}</div><div class="paybreak">${lines}</div>`;
+  document.getElementById('wdPreview').innerHTML=`<div class="faint" style="font-size:12px;margin:14px 0 4px">חישוב שכר אוטומטי${p.contractName?' · לפי חוזה "'+esc(p.contractName)+'"':''} · ${esc(vatModeLabel(p.vatMode))}</div><div class="paybreak">${lines}</div>`;
 }
 /* The work-day modal sits at z-50, BELOW projModal (z-60) — opening it from inside the
    project card would hide it behind. So we close the project card, then hand back to it. */
@@ -3149,7 +3274,7 @@ function finBreakdownBody(md){
     return `<div class="fin-brk-row" onclick="openWorkday('${w.id}')">
       <span class="cdot" style="background:${col}"></span>
       <div style="flex:1;min-width:0"><div class="fin-brk-nm">${nm}${role?' · '+role:''}</div><div class="faint" style="font-size:11.5px">${fmtDate(w.date)}</div></div>
-      <div class="num" style="font-weight:600;text-align:start">${f(p.total)}${p.plusVat?`<div class="faint" style="font-size:11px;font-weight:400">${f(p.sub)} לפני מע"מ</div>`:''}</div>
+      <div class="num" style="font-weight:600;text-align:start">${f(p.total)}${p.vat>0?`<div class="faint" style="font-size:11px;font-weight:400">${f(p.sub)} לפני מע"מ</div>`:''}</div>
     </div>`;
   }).join('')+'</div>';
 }
@@ -3193,26 +3318,32 @@ function renderFinance(){
   let wdIncome=0, vat=0, gross=0; const byStatus={unissued:0,issued:0,paid:0,overdue:0};
   for(const w of md){ const p=computePay(w); wdIncome+=p.sub; vat+=p.vat; gross+=p.total; byStatus[w.status||'unissued']=(byStatus[w.status||'unissued']||0)+p.total; }
   const income=byM[ym]||0;
+  const expM=expensesForMonth(ym);
+  const profitM=Math.max(0, income-expM.deductible);       // tax is charged on profit, not turnover
   const proj=annualProjection(y), effRate=proj.effRate;
-  const bitM=bituachMonthly(income);
-  const taxM=income*effRate;                  // income tax is annual → smoothed via the effective rate
-  const takeM=Math.max(0, income-taxM-bitM);
+  const bitM=bituachMonthly(profitM);
+  const taxM=profitM*effRate;                 // income tax is annual → smoothed via the effective rate
+  const takeM=Math.max(0, profitM-taxM-bitM);
+  const expY=expensesForYear(y);
+  const vatDue=Math.max(0, vat-expM.vatCredit);            // מע"מ עסקאות פחות תשומות, לחודש הזה
 
   // year to date, from the same de-duplicated per-month map
   const nowY=new Date().getFullYear(), closedYear=y<nowY;
   let yIncome=0; for(const k in byM) yIncome+=byM[k];
-  let yBit=0; for(const k in byM) yBit+=bituachMonthly(byM[k]);
+  const yProfit=Math.max(0, yIncome-expY.deductible);
+  const perMonthProfit=[]; for(const k in byM) perMonthProfit.push(Math.max(0, byM[k]-expensesForMonth(k).deductible));
+  let yBit=0; for(const p of perMonthProfit) yBit+=bituachMonthly(p);
   /* A closed year can use the real progressive calculation. A year in progress cannot: applying
      a full year's credit points and low brackets to a partial year produced a "מדויק בפועל"
      figure thousands of ₪ apart from the sum of the same months' cards. Mid-year we pro-rate
      the projection instead, so YTD is by construction the sum of its months. */
-  const yTax = closedYear ? incomeTaxNetAnnual(yIncome) : yIncome*effRate;
-  const yTake=Math.max(0, yIncome-yTax-yBit);
+  const yTax = closedYear ? taxPackage(yProfit, perMonthProfit).tax : yProfit*effRate;
+  const yTake=Math.max(0, yProfit-yTax-yBit);
   const histYear=historicalIncomeForYear(y);
   const overlaps=overlappingIncomeMonths(y);
 
   const cf=finCashflowData(ym);
-  const base=Math.max(income, takeM+taxM+bitM, 1);   // keep segments <=100% when BL's minimum exceeds a tiny month
+  const base=Math.max(profitM, takeM+taxM+bitM, 1);  // keep segments <=100% when BL's minimum exceeds a tiny month
   const segTake=Math.max(0,takeM)/base*100, segTax=taxM/base*100, segBit=bitM/base*100;
   const emptyMonth = md.length===0 && histM===0;
 
@@ -3220,6 +3351,9 @@ function renderFinance(){
   const mCalc = finMod('calc','איך זה מחושב', f(takeM), `
     <div class="fin-lines">
       <div class="fin-line"><span>הכנסה לפני מע"מ</span><span class="num">${f(income)}</span></div>
+      ${expM.deductible>0?`<div class="fin-line minus"><span>− הוצאות מוכרות</span><span class="num">${f(expM.deductible)}</span></div>
+      <div class="fin-line"><span>= רווח חייב במס</span><span class="num">${f(profitM)}</span></div>`:''}
+      ${expM.deductible>income?`<div class="finnote" style="margin:2px 0 6px">ההוצאות של ${MONTH_NAMES[mo]} גדולות מההכנסה שלו (רכישה גדולה, למשל ציוד). <b>העודף לא הולך לאיבוד</b> — הוא מתקזז מול ההכנסה של שאר השנה בחישוב השנתי.</div>`:''}
       <div class="fin-line minus"><span>− מס הכנסה (${(effRate*100).toFixed(1)}%)</span><span class="num">${f(taxM)}</span></div>
       <div class="fin-line minus"><span>− ביטוח לאומי + בריאות</span><span class="num">${f(bitM)}</span></div>
       <div class="fin-line total"><span>נשאר לך</span><span class="num">${f(takeM)}</span></div>
@@ -3228,15 +3362,32 @@ function renderFinance(){
     <div class="fin-legend"><span><i class="take"></i>נשאר ${Math.round(segTake)}%</span><span><i class="tax"></i>מס ${Math.round(segTax)}%</span><span><i class="bit"></i>ביט"ל ${Math.round(segBit)}%</span></div>`:''}
     ${isHistMonth
       ? '<div class="finnote">החודש הזה מגיע מרישום היסטורי (Morning), שהוא סכום לפני מע"מ. המע"מ שנגבה בפועל אינו מפורט כאן.</div>'
-      : `<div class="finnote">מע"מ שגבית: <b>${f(vat)}</b> — אינו שלך, מועבר למדינה; לא נכלל ב"נשאר לך".</div>`}`, 'gold');
+      : `<div class="finnote">מע"מ שגבית: <b>${f(vat)}</b> — אינו שלך, מועבר למדינה; לא נכלל ב"נשאר לך".${
+          expM.vatCredit>0?` מע"מ תשומות מהוצאות: <b>${f(expM.vatCredit)}</b> → לתשלום בפועל <b>${f(vatDue)}</b>.`:''}</div>`}`, 'gold');
+
+  const mExp = finMod('exp','הוצאות · '+MONTH_NAMES[mo], expM.n?f(expM.amount):'הוסף', `
+    <div class="finnote">הוצאה עסקית עושה שני דברים: החלק ללא מע"מ מקטין את הרווח החייב במס, וחלק המע"מ חוזר אליך כמע"מ תשומות.</div>
+    <div class="fin-lines">
+      <div class="fin-line"><span>סה"כ ששילמת (${expM.n} ${expM.n===1?'הוצאה':'הוצאות'})</span><span class="num">${f(expM.amount)}</span></div>
+      <div class="fin-line"><span>מזה מוכר לצורכי מס</span><span class="num" style="color:var(--good)">${f(expM.deductible)}</span></div>
+      <div class="fin-line"><span>מע"מ תשומות להחזר</span><span class="num" style="color:var(--good)">${f(expM.vatCredit)}</span></div>
+      <div class="fin-line total"><span>חיסכון במס בזכות ההוצאות</span><span class="num">${f(expM.deductible*effRate+expM.vatCredit)}</span></div>
+    </div>
+    <button class="btn sm primary" style="margin-top:12px" onclick="go('expenses')">נהל הוצאות ←</button>`, expM.n?'good':'');
 
   const mRate = finMod('rate','שיעור מס אפקטיבי', (effRate*100).toFixed(1)+'%', `
-    <div class="finnote">${esc(proj.basis)}${proj.isOverride?' · ידני':''} · מס שנתי צפוי ${f(proj.tax)}</div>
-    <label class="fld" style="font-size:12px;margin-top:4px">צפי הכנסה שנתית (לפני מע"מ) — ניתן לעריכה
+    <div class="fin-lines">
+      <div class="fin-line"><span>צפי הכנסה שנתית</span><span class="num">${f(proj.projected)}</span></div>
+      ${proj.expenses>0?`<div class="fin-line minus"><span>− צפי הוצאות מוכרות</span><span class="num">${f(proj.expenses)}</span></div>`:''}
+      <div class="fin-line"><span>= רווח שנתי צפוי</span><span class="num">${f(proj.profit)}</span></div>
+      <div class="fin-line minus"><span>− מס הכנסה שנתי</span><span class="num">${f(proj.tax)}</span></div>
+    </div>
+    <div class="finnote">${esc(proj.basis)}${proj.isOverride?' · ידני':''}</div>
+    <label class="fld" style="font-size:12px;margin-top:4px">צפי הכנסה שנתית (לפני מע"מ, לפני הוצאות) — ניתן לעריכה
       <input type="number" id="fin_annualEst" value="${Math.round(proj.projected)}" onchange="saveAnnualEstimate(${y}, this.value)">
     </label>
     ${proj.isOverride?`<button class="btn sm ghost" style="margin-top:8px" onclick="saveAnnualEstimate(${y}, '')">↺ חזרה לחישוב אוטומטי</button>`:''}
-    <div class="finnote">מס ההכנסה מדורג ושנתי, לא לפי חודש בודד. ערוך את הצפי וכל המספרים מתעדכנים.</div>`, 'gold');
+    <div class="finnote">מס ההכנסה מדורג ושנתי, לא לפי חודש בודד, ומחושב על הרווח (הכנסה פחות הוצאות). 52% מהביטוח הלאומי מוכרים אף הם כהוצאה.</div>`, 'gold');
 
   const mCash = finMod('cash','כניסות לחשבון · '+MONTH_NAMES[mo], f(cf.expected+cf.landed), cf.body, cf.expected>0?'gold':'');
   const mBreak = finMod('breakdown','ממה מורכב · '+MONTH_NAMES[mo], md.length?md.length+' עבודות':'—', finBreakdownBody(md));
@@ -3257,10 +3408,13 @@ function renderFinance(){
       : 'סכום החודשים שכבר עברו, לפי אותו שיעור מס אפקטיבי שמופיע בכל חודש. המספר יתכנס לאמת ככל שהשנה מתקדמת.'}</div>
     <div class="fin-lines">
       <div class="fin-line"><span>הכנסה מצטברת (לפני מע"מ)</span><span class="num">${f(yIncome)}</span></div>
+      ${expY.deductible>0?`<div class="fin-line minus"><span>− הוצאות מוכרות</span><span class="num">${f(expY.deductible)}</span></div>
+      <div class="fin-line"><span>= רווח חייב במס</span><span class="num">${f(yProfit)}</span></div>`:''}
       <div class="fin-line minus"><span>− מס הכנסה</span><span class="num">${f(yTax)}</span></div>
       <div class="fin-line minus"><span>− ביטוח לאומי</span><span class="num">${f(yBit)}</span></div>
       <div class="fin-line total"><span>נשאר לך</span><span class="num">${f(yTake)}</span></div>
-    </div>`, 'good');
+    </div>
+    ${expY.vatCredit>0?`<div class="finnote">מע"מ תשומות שנצבר השנה: <b>${f(expY.vatCredit)}</b> — מקוזז מהמע"מ שגבית בדוח הדו-חודשי.</div>`:''}`, 'good');
 
   const overlapWarn = overlaps.length
     ? `<div class="notice" style="margin-bottom:10px;border-color:var(--warn);color:var(--text);font-size:12.5px;line-height:1.6">
@@ -3322,10 +3476,162 @@ function renderFinance(){
     ${clocks}
 
     <div class="fin-grid">
-      ${mCalc}${mBreak}${mCash}${mInv}${mRate}${mYtd}${mHist}
+      ${mCalc}${mBreak}${mCash}${mExp}${mInv}${mRate}${mYtd}${mHist}
     </div>
 
     <div class="src" style="margin-top:16px">ההפרשות הן הערכה לחיסכון לפי שיעורי ${s.taxYear} · <a onclick="go('settings')" style="cursor:pointer;color:var(--info)">כוונון בהגדרות</a>. השומה הסופית נקבעת בסוף השנה מול רואה החשבון.</div>`;
+}
+
+/* ============================================================
+   EXPENSES — deductible cost + reclaimable input VAT
+   ============================================================ */
+let _expRef=new Date(), _expCat='all';
+function expMove(d){ _expRef=new Date(_expRef.getFullYear(), _expRef.getMonth()+d, 1); renderExpenses(); }
+function expToday(){ _expRef=new Date(); renderExpenses(); }
+function setExpCat(k){ _expCat=k; renderExpenses(); }
+function renderExpenses(){
+  const root=document.getElementById('expRoot'); if(!root) return;
+  const y=_expRef.getFullYear(), mo=_expRef.getMonth(), ym=y+'-'+String(mo+1).padStart(2,'0');
+  const f=n=>fmtMoney(Math.round(n));
+  const m=expensesForMonth(ym), yr=expensesForYear(y);
+  const proj=annualProjection(y);
+  let list=getExpenses().filter(e=>monthKey(e.date)===ym);
+  if(_expCat!=='all') list=list.filter(e=>(e.category||'other')===_expCat);
+  list.sort((a,b)=>(normDate(b.date)||'').localeCompare(normDate(a.date)||''));
+
+  const catsUsed=[...new Set(getExpenses().filter(e=>monthKey(e.date)===ym).map(e=>e.category||'other'))];
+  const chips=['all',...catsUsed].map(k=>`<button class="chip ${_expCat===k?'on':''}" onclick="setExpCat('${k}')">${k==='all'?'הכל':esc(expenseCat(k)[1])}</button>`).join('');
+
+  const rows=list.map(e=>{
+    const c=computeExpense(e), cat=expenseCat(e.category);
+    const partial=(c.dPct<100||c.vPct<100)?`<span class="faint" style="font-size:11px"> · מוכר ${c.dPct}% · מע"מ ${c.vPct}%</span>`:'';
+    return `<div class="exp-row" onclick="openExpense('${e.id}')">
+      <div class="exp-d"><b>${new Date((normDate(e.date)||todayISO())+'T00:00:00').getDate()}</b><span>${MONTH_NAMES[mo].slice(0,3)}</span></div>
+      <div style="flex:1;min-width:0">
+        <div class="exp-nm">${esc(e.vendor||cat[1])}</div>
+        <div class="faint" style="font-size:11.5px">${esc(cat[1])}${partial}${e.note?' · '+esc(e.note):''}</div>
+      </div>
+      <div style="text-align:start;white-space:nowrap">
+        <div class="num" style="font-weight:600">${f(c.amount)}</div>
+        <div class="faint" style="font-size:11px">מוכר ${f(c.deductible)}${c.vatCredit>0?' · מע"מ '+f(c.vatCredit):''}</div>
+      </div>
+      <button class="rowdel" onclick="event.stopPropagation();deleteExpense('${e.id}')" title="מחק">🗑</button>
+    </div>`;
+  }).join('');
+
+  const saved = m.deductible*proj.effRate + m.vatCredit;
+  root.innerHTML=`
+    <div class="fin-head">
+      <div class="cal-nav">
+        <button onclick="expMove(-1)" title="החודש הקודם">›</button>
+        <button onclick="expMove(1)" title="החודש הבא">‹</button>
+      </div>
+      <h2>${MONTH_NAMES[mo]} ${y}</h2>
+      <button class="btn sm ghost" onclick="expToday()">החודש</button>
+      <div style="flex:1"></div>
+      <button class="btn primary" onclick="openExpense()">+ הוצאה</button>
+    </div>
+
+    <div class="dstrip" style="margin-bottom:16px">
+      <div class="cell" style="cursor:default"><div class="k">שילמת החודש</div><div class="v">${f(m.amount)}</div><small>${m.n} ${m.n===1?'הוצאה':'הוצאות'}</small></div>
+      <div class="cell" style="cursor:default"><div class="k">מוכר לצורכי מס</div><div class="v good">${f(m.deductible)}</div><small>מקטין את הרווח החייב</small></div>
+      <div class="cell" style="cursor:default"><div class="k">מע"מ תשומות</div><div class="v gold">${f(m.vatCredit)}</div><small>חוזר אליך בדוח</small></div>
+      <div class="cell" style="cursor:default"><div class="k">חיסכון במס</div><div class="v good">${f(saved)}</div><small>מס + מע"מ שנחסך</small></div>
+    </div>
+
+    ${catsUsed.length>1?`<div class="filters" style="margin-bottom:12px">${chips}</div>`:''}
+    ${rows ? `<div class="dpanel"><div class="dpanel-b" style="padding:4px 18px 8px">${rows}</div></div>` : `
+      <div class="empty"><div class="big">↧</div>
+        <div>אין הוצאות ב${MONTH_NAMES[mo]}.</div>
+        <div class="faint" style="font-size:13px;margin-top:8px;max-width:46ch;line-height:1.7">כל הוצאה עסקית — ציוד, דלק, ביטוח, תוכנה, רואה חשבון — מקטינה את המס שתשלם, והמע"מ שבתוכה חוזר אליך. שווה לרשום הכול.</div>
+        <button class="btn primary" style="margin-top:14px" onclick="openExpense()">+ הוצאה ראשונה</button>
+      </div>`}
+
+    <div class="dash-sec">${y} · מתחילת השנה</div>
+    <div class="dpanel"><div class="dpanel-b" style="padding:16px 18px">
+      <div class="fin-lines">
+        <div class="fin-line"><span>סה"כ הוצאות</span><span class="num">${f(yr.amount)}</span></div>
+        <div class="fin-line"><span>מוכר לצורכי מס</span><span class="num" style="color:var(--good)">${f(yr.deductible)}</span></div>
+        <div class="fin-line"><span>מע"מ תשומות מצטבר</span><span class="num" style="color:var(--accent)">${f(yr.vatCredit)}</span></div>
+        <div class="fin-line total"><span>חיסכון מוערך במס</span><span class="num">${f(yr.deductible*proj.effRate+yr.vatCredit)}</span></div>
+      </div>
+      ${Object.keys(yr.byCat).length?`<div class="fin-sub-h">לפי קטגוריה</div>${
+        Object.entries(yr.byCat).sort((a,b)=>b[1]-a[1]).map(([k,v])=>
+          `<div class="fin-line"><span>${esc(expenseCat(k)[1])}</span><span class="num">${f(v)}</span></div>`).join('')}`:''}
+    </div></div>
+    <div class="src" style="margin-top:14px">אחוזי ההכרה הם ברירות מחדל נפוצות (רכב פרטי בשימוש עסקי — 45% מההוצאה ו‑2/3 מהמע"מ). ניתן לשנות בכל הוצאה. הקביעה הסופית היא של רואה החשבון.</div>`;
+}
+let _editingExpId=null;
+function openExpense(id){
+  _editingExpId=id||null;
+  const e = id ? (getExpenses().find(x=>x.id===id)||{}) : { date:todayISO(), category:'gear', vatMode:'included' };
+  const cat=expenseCat(e.category);
+  document.getElementById('expTitle').textContent = id?'עריכת הוצאה':'הוצאה חדשה';
+  document.getElementById('expDelBtn').style.display = id?'inline-flex':'none';
+  document.getElementById('expBody').innerHTML=`
+    <div class="grid" style="grid-template-columns:1fr 1fr">
+      <label class="fld">תאריך<input type="date" id="ex_date" value="${esc(normDate(e.date)||todayISO())}"></label>
+      <label class="fld">סכום ששילמת ₪<input type="number" id="ex_amount" value="${e.amount!=null?esc(e.amount):''}" placeholder="כולל מע\\"מ" oninput="renderExpPreview()"></label>
+      <label class="fld">קטגוריה
+        <select id="ex_cat" onchange="onExpCatChange()">${EXPENSE_CATS.map(([k,l])=>`<option value="${k}" ${(e.category||'gear')===k?'selected':''}>${l}</option>`).join('')}</select>
+      </label>
+      <label class="fld">מע"מ בקבלה
+        <select id="ex_vatmode" onchange="renderExpPreview()">
+          <option value="included" ${(e.vatMode||'included')==='included'?'selected':''}>כולל מע"מ — הסכום בקבלה</option>
+          <option value="exempt" ${e.vatMode==='exempt'?'selected':''}>ללא מע"מ — עוסק פטור / חו"ל</option>
+        </select>
+      </label>
+      <label class="fld">ספק / תיאור<input type="text" id="ex_vendor" value="${esc(e.vendor||'')}" placeholder="למשל: פוטו לון"></label>
+      <label class="fld">אחוז הכרה למס %<input type="number" id="ex_dpct" value="${e.deductPct!=null?esc(e.deductPct):''}" placeholder="${cat[2]}" oninput="renderExpPreview()"></label>
+      <label class="fld">אחוז החזר מע"מ %<input type="number" id="ex_vpct" value="${e.vatReclaimPct!=null?esc(e.vatReclaimPct):''}" placeholder="${cat[3]}" oninput="renderExpPreview()"></label>
+    </div>
+    <label class="fld" style="margin-top:10px">הערה<input type="text" id="ex_note" value="${esc(e.note||'')}" placeholder="אופציונלי"></label>
+    <div id="expPreview"></div>`;
+  renderExpPreview();
+  openModal('expModal');
+}
+function onExpCatChange(){
+  const cat=expenseCat(document.getElementById('ex_cat').value);
+  document.getElementById('ex_dpct').placeholder=cat[2];
+  document.getElementById('ex_vpct').placeholder=cat[3];
+  renderExpPreview();
+}
+function readExpForm(){
+  const num=id=>{ const v=document.getElementById(id).value; return v===''?null:+v; };
+  return { date:normDate(document.getElementById('ex_date').value), amount:num('ex_amount'),
+    category:document.getElementById('ex_cat').value, vatMode:document.getElementById('ex_vatmode').value,
+    vendor:document.getElementById('ex_vendor').value.trim(), deductPct:num('ex_dpct'), vatReclaimPct:num('ex_vpct'),
+    note:document.getElementById('ex_note').value.trim() };
+}
+function renderExpPreview(){
+  const c=computeExpense(readExpForm());
+  const f=n=>Math.round(n).toLocaleString('he-IL')+' ₪';
+  document.getElementById('expPreview').innerHTML=`
+    <div class="faint" style="font-size:12px;margin:14px 0 4px">מה ההוצאה הזו שווה לך</div>
+    <div class="paybreak">
+      <div class="ln"><span>שילמת</span><span class="num">${f(c.amount)}</span></div>
+      <div class="ln"><span>מזה מע"מ</span><span class="num">${f(c.vat)}</span></div>
+      <div class="ln"><span>מוכר לצורכי מס (${c.dPct}%)</span><span class="num">${f(c.deductible)}</span></div>
+      <div class="ln tot"><span>מע"מ תשומות להחזר (${c.vPct}%)</span><span class="num">${f(c.vatCredit)}</span></div>
+    </div>`;
+}
+function saveExpense(){
+  const d=readExpForm();
+  if(!d.date){ alert('יש לבחור תאריך.'); return; }
+  if(d.amount==null || !(d.amount>0)){ alert('יש להזין סכום.'); return; }
+  const list=getExpenses();
+  if(_editingExpId){ const i=list.findIndex(x=>x.id===_editingExpId); if(i>=0) list[i]=Object.assign({},list[i],d,{id:_editingExpId}); }
+  else { d.id=uid(); d.createdAt=Date.now(); list.push(d); }
+  setExpenses(list);
+  closeModal('expModal'); _editingExpId=null;
+  refreshView();
+}
+function deleteExpenseFromModal(){ if(_editingExpId) deleteExpense(_editingExpId); }
+function deleteExpense(id){
+  if(!confirm('למחוק את ההוצאה?')) return;
+  setExpenses(getExpenses().filter(e=>e.id!==id));
+  closeModal('expModal'); _editingExpId=null;
+  refreshView();
 }
 
 /* ---- finance page: historical-income module body + Morning import ---- */
