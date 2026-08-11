@@ -314,7 +314,9 @@ label.fld input:focus,label.fld select:focus,label.fld textarea:focus{
 .piperow .lbl{flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .piperow .n{color:var(--faint);font-size:11.5px;font-variant-numeric:tabular-nums}
 .piperow .amt{font-variant-numeric:tabular-nums;font-weight:600}
-.arr{display:flex;gap:8px;margin-top:15px;padding-top:15px;border-top:1px solid var(--line)}
+.arr-h{margin-top:15px;padding-top:14px;border-top:1px solid var(--line);font-size:12.5px;font-weight:600;color:var(--text)}
+.arr-h span{font-weight:400;font-size:11.5px}
+.arr{display:flex;gap:8px;margin-top:9px}
 .arr .m{flex:1;background:var(--bg2);border:1px solid var(--line);border-radius:9px;padding:9px 8px;text-align:center;min-width:0}
 .arr .mk{color:var(--faint);font-size:10.5px;text-transform:uppercase;letter-spacing:.4px;font-weight:600}
 .arr .mv{font-size:14px;font-weight:700;font-variant-numeric:tabular-nums;margin-top:3px;letter-spacing:-.3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
@@ -491,7 +493,15 @@ td[title="לחץ לשינוי סטטוס"]:hover .st{border-color:var(--accent-d
 .pmonth-inv{margin-inline-start:auto;display:flex;align-items:center;gap:7px;font-size:12.5px}
 .pmonth-inv .st{cursor:pointer;transition:transform .1s}
 .pmonth-inv .st:hover{transform:scale(1.04)}
-.pmonth table.data{margin:0}
+/* each month renders its own <table>, so auto layout sized every one to its own
+   content and the columns drifted apart. Fixed layout + shared widths lines them up. */
+.pmonth table.data{margin:0;table-layout:fixed}
+.pmonth table.data th:nth-child(1),.pmonth table.data td:nth-child(1){width:24%}
+.pmonth table.data th:nth-child(2),.pmonth table.data td:nth-child(2){width:26%}
+.pmonth table.data th:nth-child(3),.pmonth table.data td:nth-child(3){width:14%}
+.pmonth table.data th:nth-child(4),.pmonth table.data td:nth-child(4){width:28%}
+.pmonth table.data th:nth-child(5),.pmonth table.data td:nth-child(5){width:8%}
+.pmonth table.data td{overflow:hidden;text-overflow:ellipsis}
 .pm-list{display:flex;flex-direction:column;gap:8px}
 .pm-row{display:flex;align-items:center;gap:11px;padding:11px 13px;border:1px solid var(--line);border-radius:11px;background:var(--panel2)}
 .pm-row .pm-name{font-size:14.5px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
@@ -854,12 +864,12 @@ td[title="לחץ לשינוי סטטוס"]:hover .st{border-color:var(--accent-d
   <div class="modal">
     <div class="modal-head">
       <h2 id="wdTitle">יום עבודה</h2>
-      <button class="x" onclick="closeModal('wdModal')">×</button>
+      <button class="x" onclick="closeWdModal()">×</button>
     </div>
     <div class="modal-body" id="wdBody"></div>
     <div class="modal-foot">
       <button class="btn primary" onclick="saveWorkday()">שמור יום עבודה</button>
-      <button class="btn ghost" onclick="closeModal('wdModal')">ביטול</button>
+      <button class="btn ghost" onclick="closeWdModal()">ביטול</button>
     </div>
   </div>
 </div>
@@ -2231,6 +2241,19 @@ function renderWdPreview(){
   lines+=`<div class="ln tot"><span>סה"כ בחשבונית</span><span class="num">${f(p.total)}</span></div>`;
   document.getElementById('wdPreview').innerHTML=`<div class="faint" style="font-size:12px;margin:14px 0 4px">חישוב שכר אוטומטי${p.contractName?' · לפי חוזה "'+esc(p.contractName)+'"':''}</div><div class="paybreak">${lines}</div>`;
 }
+/* The work-day modal sits at z-50, BELOW projModal (z-60) — opening it from inside the
+   project card would hide it behind. So we close the project card, then hand back to it. */
+let _wdReturnToProj=null;
+function openWorkdayFromProject(wdId){
+  _wdReturnToProj=_editingProjId;
+  closeModal('projModal');
+  openWorkday(wdId);
+}
+function closeWdModal(){
+  closeModal('wdModal'); _editingWdId=null;
+  const back=_wdReturnToProj; _wdReturnToProj=null;
+  if(back) openProject(back);
+}
 function saveWorkday(){
   const d=readWdForm();
   if(!d.date){ alert('יש לבחור תאריך.'); return; }
@@ -2239,12 +2262,14 @@ function saveWorkday(){
   else { d.id=uid(); d.createdAt=Date.now(); list.push(d); }
   save(LS.workdays,list);
   closeModal('wdModal'); _editingWdId=null;
-  renderWorkdays();
+  const back=_wdReturnToProj; _wdReturnToProj=null;
+  refreshView();                 // a day can be opened from workdays, calendar OR the dashboard
+  if(back) openProject(back);
 }
 function deleteWorkday(id){
   if(!confirm('למחוק את יום העבודה?')) return;
   save(LS.workdays, load(LS.workdays,[]).filter(w=>w.id!==id));
-  renderWorkdays();
+  refreshView();
 }
 function fmtDate(iso){
   iso=normDate(iso);
@@ -2440,7 +2465,7 @@ function renderProjDaysEditor(projId){
       <input type="date" class="pde-date" value="${esc(w.date||'')}" onchange="updateProjDayDate('${w.id}',this.value)">
       <span style="font-size:11px;color:${sc};white-space:nowrap;padding:2px 6px">${st}</span>
       <span style="display:flex;gap:4px;flex-shrink:0">
-        <button class="pde-del" style="font-size:13px;border:1px solid var(--line2);border-radius:6px;color:var(--muted)" onclick="openWorkday('${w.id}')" title="פתח לעריכה מלאה">✎</button>
+        <button class="pde-del" style="font-size:13px;border:1px solid var(--line2);border-radius:6px;color:var(--muted)" onclick="openWorkdayFromProject('${w.id}')" title="פתח לעריכה מלאה">✎</button>
         <button class="pde-del" onclick="deleteProjDayInline('${w.id}')" title="מחק יום">×</button>
       </span>
     </div>`;
@@ -2804,14 +2829,15 @@ function renderDashboard(){
   const moneyPanel=`
     <div class="dpanel dfade" style="animation-delay:60ms">
       <div class="dpanel-h">
-        <h3>כסף בדרך</h3><span class="hint">מה חייבים לך כרגע</span>
+        <h3>כסף בדרך</h3><span class="hint">סך הכל שחייבים לך · מכל החודשים, לא רק החודש</span>
         <span class="tot ${overdue>0?'':'gold'}"${overdue>0?' style="color:var(--bad)"':''}>${f(owed)}</span>
       </div>
       <div class="dpanel-b">
         ${owed>0 ? pipeBar+pipeRows+lateHtml : '<div class="dempty">אין כסף פתוח — כל מה שבוצע כבר נגבה.</div>'}
+        <div class="arr-h">מתי הכסף ייכנס לחשבון <span class="faint">· לפי חודש הכניסה, לא חודש העבודה</span></div>
         <div class="arr">${arrCells.map(c=>
           `<div class="m ${c.cur?'now':''}"><div class="mk">${c.label}</div><div class="mv">${c.amt?f(c.amt):'—'}</div></div>`).join('')}</div>
-        <div class="finnote" style="margin:10px 0 0">"צפוי להיכנס" מחושב מסוף חודש העבודה לפי תנאי התשלום של החוזה. כולל מע"מ.</div>
+        <div class="finnote" style="margin:10px 0 0">עבודה שנעשתה בחודש מסוים נכנסת לחשבון מאוחר יותר, לפי תנאי התשלום (שוטף+30 / +60) מסוף חודש העבודה. כולל מע"מ.</div>
       </div>
     </div>`;
 
@@ -2858,7 +2884,7 @@ function renderDashboard(){
         <div style="min-width:0">
           <div class="nm">${esc(p.name||'פרויקט')}${p.client?` <span class="faint" style="font-weight:400">· ${esc(p.client)}</span>`:''}</div>
           <div class="meta">${st.n?st.n+' '+(st.n===1?'יום':'ימים')+' · ':''}${range}${st.future?' · '+st.future+(st.future===1?' עתידי':' עתידיים'):''}</div>
-          ${st.gross>0?`<div class="pbar"><i style="flex:${Math.max(st.paid,0)}"></i><span style="flex:${Math.max(st.outstanding,0)}"></span></div>`:''}
+          ${st.gross>0?`<div class="pbar" title="שולם ${f(st.paid)} מתוך ${f(st.gross)} — הפס מתמלא ככל שהתשלומים נכנסים"><i style="flex:${Math.max(st.paid,0)}"></i><span style="flex:${Math.max(st.outstanding,0)}"></span></div>`:''}
         </div>
         <div class="money">${money}</div>
       </div>`;
@@ -2866,7 +2892,7 @@ function renderDashboard(){
     const head = key==='done'
       ? `<button class="lane-h" onclick="toggleLane('done')" aria-expanded="${laneOpen}">
           <span class="dot" style="background:${color}"></span>
-          <span class="t">${title}</span><span class="h">· ${rows.length} ${rows.length===1?'פרויקט':'פרויקטים'}</span>
+          <span class="t">${title}</span><span class="h">· ${rows.length} ${rows.length===1?'פרויקט':'פרויקטים'} · ${laneOpen?'לחץ להסתרה':'לחץ להצגה'}</span>
           <span class="sum">${f(laneTotal)}<span class="chev" style="transform:rotate(${laneOpen?'-90deg':'90deg'})">›</span></span>
         </button>`
       : `<div class="lane-h">
