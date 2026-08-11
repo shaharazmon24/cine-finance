@@ -257,6 +257,20 @@ label.fld input:focus,label.fld select:focus,label.fld textarea:focus{
 .fin-two-v{font-size:22px;font-weight:700;font-variant-numeric:tabular-nums}
 .fin-two-v.gold{color:var(--accent)}
 .finnote{color:var(--muted);font-size:12px;line-height:1.6;margin:10px 0}
+.fin-sub-h{margin:16px 0 2px;font-size:12px;font-weight:600;color:var(--muted)}
+/* The two clocks. The single thing that confuses people about freelance money: the month you
+   WORKED and the month the money ARRIVES are never the same month. Give each its own panel. */
+.clocks{display:grid;grid-template-columns:1fr 1fr;gap:13px;margin-bottom:8px}
+.clock{background:var(--panel);border:1px solid var(--line);border-radius:var(--r);padding:17px 19px;cursor:pointer;transition:border-color var(--t-fast) var(--ease-out)}
+.clock:hover{border-color:var(--line2)}
+.clock-k{font-size:11.5px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.4px}
+.clock-v{font-size:29px;font-weight:700;font-variant-numeric:tabular-nums;letter-spacing:-1px;margin:7px 0 3px;line-height:1}
+.clock.work .clock-v{color:var(--text)}
+.clock.inflow .clock-v{color:var(--accent)}
+.clock-s{font-size:12px;color:var(--faint);line-height:1.5}
+.clock-flow{display:flex;align-items:center;gap:6px;margin-top:11px;padding-top:11px;border-top:1px solid var(--line);font-size:11.5px;color:var(--muted);line-height:1.4}
+.clock-flow .ar{color:var(--accent);font-size:14px;flex-shrink:0}
+.clocks-note{text-align:center;font-size:12px;color:var(--faint);margin:0 0 16px;line-height:1.6}
 .fin-list{margin-top:2px}
 @media (prefers-reduced-motion: reduce){ .fin-mod-body,.fin-mod-chev{transition:none} }
 /* dashboard hero — the "how much is actually mine" panel */
@@ -661,6 +675,8 @@ td[title="לחץ לשינוי סטטוס"]:hover .st{border-color:var(--accent-d
   .dash-quick .btn{flex:1 1 calc(50% - 5px);justify-content:center}
   /* dashboard v2: strip goes 2-up, panels stack, project rows drop to two rows */
   .dcols{grid-template-columns:1fr}
+  .clocks{grid-template-columns:1fr;gap:10px}
+  .clock-v{font-size:26px}
   .dstrip .cell{flex:1 1 50%;min-width:0;padding:13px 14px;border-top:1px solid var(--line)}
   .dstrip .cell:nth-child(-n+2){border-top:0}
   .dstrip .cell:nth-child(odd){border-inline-start:0}
@@ -3078,28 +3094,50 @@ function expectedPayDate(w){
 function finCashflowData(ym){
   const f=n=>fmtMoney(Math.round(n));
   const all=load(LS.workdays,[]).filter(w=>w.tentative!==true);
-  let performed=0; for(const w of all){ if(monthKey(w.date)===ym) performed+=computePay(w).total; }
+  const curYm=todayISO().slice(0,7);
+  let performed=0, performedDays=0;
+  for(const w of all){ if(monthKey(w.date)===ym){ performed+=computePay(w).total; performedDays++; } }
   const arrivals=all.filter(w=>{ const e=expectedPayDate(w); return e && monthKey(e)===ym; })
     .sort((a,b)=>(a.date||'').localeCompare(b.date||''));
-  let expected=0; for(const w of arrivals){ if(w.status!=='paid') expected+=computePay(w).total; }
-  const rows=arrivals.map(w=>{
+  /* headline and list used to disagree: the total excluded paid days while the list below it
+     rendered them, so the rows visibly summed to more than the number above. Now split. */
+  let expected=0, landed=0;
+  for(const w of arrivals){ const t=computePay(w).total; if(w.status==='paid') landed+=t; else expected+=t; }
+  // money that was due BEFORE this month and still hasn't arrived — it used to fall out of
+  // every month's view entirely once its due date passed
+  let late=0; const lateDays=[];
+  if(ym===curYm){
+    for(const w of all){
+      if(w.status==='paid') continue;
+      const e=expectedPayDate(w); if(!e || monthKey(e)>=ym) continue;
+      late+=computePay(w).total; lateDays.push(w);
+    }
+  }
+  const row=(w,extra)=>{
     const p=computePay(w), nm=esc(dayLabel(w)||'—'), c=resolveContract(w);
-    const terms=(c&&c.paymentTerms)?esc(c.paymentTerms):('שוטף+'+parsePaymentTermsDays(c&&c.paymentTerms));
-    const tag=w.status==='paid'?' · <span style="color:var(--good)">שולם</span>':(w.status==='overdue'?' · <span style="color:var(--bad)">באיחור</span>':(w.status==='issued'?' · הופק':''));
+    const raw=w.paymentTerms||(c&&c.paymentTerms);
+    const terms=raw?esc(raw):('ברירת מחדל · שוטף+'+parsePaymentTermsDays(null));
+    const e=expectedPayDate(w);
     return `<div class="fin-brk-row" onclick="openWorkday('${w.id}')">
       <span class="cdot" style="background:${w.projectId?projColor(w.projectId):'#6b7280'}"></span>
-      <div style="flex:1;min-width:0"><div class="fin-brk-nm">${nm}</div><div class="faint" style="font-size:11.5px">בוצע ${fmtDate(w.date)} · ${terms}${tag}</div></div>
+      <div style="flex:1;min-width:0"><div class="fin-brk-nm">${nm}</div>
+        <div class="faint" style="font-size:11.5px">עבדת ${fmtDate(w.date)} · ${terms} → ${e?fmtDate(e):'—'}${extra||''}</div></div>
       <div class="num" style="font-weight:600">${f(p.total)}</div>
     </div>`;
-  }).join('');
+  };
+  const unpaidRows=arrivals.filter(w=>w.status!=='paid').map(w=>row(w, w.status==='issued'?' · חשבונית הופקה':'')).join('');
+  const paidRows=arrivals.filter(w=>w.status==='paid').map(w=>row(w,' · <span style="color:var(--good)">כבר נכנס</span>')).join('');
+  const lateRows=lateDays.sort((a,b)=>(a.date||'').localeCompare(b.date||'')).map(w=>row(w,' · <span style="color:var(--bad)">עבר המועד</span>')).join('');
   const body=`
-    <div class="finnote">"בוצע" = עבודות שנעשו החודש · "צפוי להיכנס" = כסף שאמור להגיע בפועל לפי תנאי התשלום, מסוף חודש העבודה. כולל מע"מ.</div>
+    <div class="finnote">כמה כסף אמור <b>להיכנס לחשבון</b> בחודש הזה — מעבודות שנעשו קודם, לפי תנאי התשלום. כולל מע"מ.</div>
     <div class="fin-two">
-      <div><div class="fin-two-k">בוצע החודש</div><div class="fin-two-v">${f(performed)}</div></div>
       <div><div class="fin-two-k">צפוי להיכנס</div><div class="fin-two-v gold">${f(expected)}</div></div>
+      <div><div class="fin-two-k">כבר נכנס</div><div class="fin-two-v" style="color:var(--good)">${f(landed)}</div></div>
     </div>
-    ${rows?`<div class="fin-list">${rows}</div>`:'<div class="faint" style="font-size:13px">אין תשלומים צפויים להיכנס החודש.</div>'}`;
-  return { performed, expected, body };
+    ${unpaidRows?`<div class="fin-list">${unpaidRows}</div>`:'<div class="faint" style="font-size:13px;padding:4px 0">אין תשלומים שממתינים להיכנס החודש.</div>'}
+    ${paidRows?`<div class="fin-sub-h">כבר נכנס</div><div class="fin-list">${paidRows}</div>`:''}
+    ${late>0?`<div class="fin-sub-h" style="color:var(--bad)">היה אמור להיכנס כבר · ${f(late)}</div><div class="fin-list">${lateRows}</div>`:''}`;
+  return { performed, performedDays, expected, landed, late, body };
 }
 /* body: the work days behind a month's income */
 function finBreakdownBody(md){
@@ -3116,6 +3154,12 @@ function finBreakdownBody(md){
   }).join('')+'</div>';
 }
 let _finOpen=new Set();   // which finance modules are expanded (persists across re-render)
+/* clicking a clock should always REVEAL its detail, never fold it away again */
+function openFinMod(id){
+  const el=document.querySelector('.fin-mod[data-mod="'+id+'"]'); if(!el) return;
+  if(!el.classList.contains('open')) toggleFinMod(id);
+  el.scrollIntoView({behavior:'smooth',block:'nearest'});
+}
 function toggleFinMod(id){
   const el=document.querySelector('.fin-mod[data-mod="'+id+'"]'); if(!el) return;
   const open=el.classList.toggle('open');
@@ -3140,28 +3184,37 @@ function renderFinance(){
   const f=n=>fmtMoney(Math.round(n));
   const all=load(LS.workdays,[]).filter(w=>w.tentative!==true);
 
-  // selected month — WORK DAYS ONLY. Historical income is a separate yearly sync, not "this month".
+  // selected month. incomeByMonth resolves work days AND historical income into ONE figure per
+  // month (historical overrides), so a month that only exists in a Morning import is no longer
+  // rendered as "0 ₪" while the history card two rows down shows the real number.
   const md=all.filter(w=>monthKey(w.date)===ym);
-  let income=0, vat=0, gross=0; const byStatus={unissued:0,issued:0,paid:0,overdue:0};
-  for(const w of md){ const p=computePay(w); income+=p.sub; vat+=p.vat; gross+=p.total; byStatus[w.status||'unissued']=(byStatus[w.status||'unissued']||0)+p.total; }
+  const byM=incomeByMonth(y);
+  const histM=historicalIncomeForMonth(ym), isHistMonth=histM>0;
+  let wdIncome=0, vat=0, gross=0; const byStatus={unissued:0,issued:0,paid:0,overdue:0};
+  for(const w of md){ const p=computePay(w); wdIncome+=p.sub; vat+=p.vat; gross+=p.total; byStatus[w.status||'unissued']=(byStatus[w.status||'unissued']||0)+p.total; }
+  const income=byM[ym]||0;
   const proj=annualProjection(y), effRate=proj.effRate;
   const bitM=bituachMonthly(income);
   const taxM=income*effRate;                  // income tax is annual → smoothed via the effective rate
   const takeM=Math.max(0, income-taxM-bitM);
 
-  // year to date (work days + historical sync income) — for the accurate cumulative figures
-  const ytd=all.filter(w=>(w.date||'').startsWith(y+'-'));
-  let yIncome=0; const perMonthIncome={};
-  for(const w of ytd){ const p=computePay(w); yIncome+=p.sub; const k=monthKey(w.date); perMonthIncome[k]=(perMonthIncome[k]||0)+p.sub; }
-  for(const e of getIncome()){ if((e.month||'').startsWith(y+'-')){ perMonthIncome[e.month]=(perMonthIncome[e.month]||0)+(+e.amountExVat||0); yIncome+=(+e.amountExVat||0); } }
-  let yBit=0; for(const k in perMonthIncome) yBit+=bituachMonthly(perMonthIncome[k]);
-  const yTax=incomeTaxNetAnnual(yIncome), yTake=Math.max(0, yIncome-yTax-yBit);
+  // year to date, from the same de-duplicated per-month map
+  const nowY=new Date().getFullYear(), closedYear=y<nowY;
+  let yIncome=0; for(const k in byM) yIncome+=byM[k];
+  let yBit=0; for(const k in byM) yBit+=bituachMonthly(byM[k]);
+  /* A closed year can use the real progressive calculation. A year in progress cannot: applying
+     a full year's credit points and low brackets to a partial year produced a "מדויק בפועל"
+     figure thousands of ₪ apart from the sum of the same months' cards. Mid-year we pro-rate
+     the projection instead, so YTD is by construction the sum of its months. */
+  const yTax = closedYear ? incomeTaxNetAnnual(yIncome) : yIncome*effRate;
+  const yTake=Math.max(0, yIncome-yTax-yBit);
   const histYear=historicalIncomeForYear(y);
+  const overlaps=overlappingIncomeMonths(y);
 
   const cf=finCashflowData(ym);
-  const base=income>0?income:1;
+  const base=Math.max(income, takeM+taxM+bitM, 1);   // keep segments <=100% when BL's minimum exceeds a tiny month
   const segTake=Math.max(0,takeM)/base*100, segTax=taxM/base*100, segBit=bitM/base*100;
-  const emptyMonth = md.length===0 && historicalIncomeForMonth(ym)===0;
+  const emptyMonth = md.length===0 && histM===0;
 
   // ---------- collapsible modules ----------
   const mCalc = finMod('calc','איך זה מחושב', f(takeM), `
@@ -3173,7 +3226,9 @@ function renderFinance(){
     </div>
     ${income>0?`<div class="fin-bar" style="margin-top:14px"><div class="fin-seg take" style="width:${segTake}%"></div><div class="fin-seg tax" style="width:${segTax}%"></div><div class="fin-seg bit" style="width:${segBit}%"></div></div>
     <div class="fin-legend"><span><i class="take"></i>נשאר ${Math.round(segTake)}%</span><span><i class="tax"></i>מס ${Math.round(segTax)}%</span><span><i class="bit"></i>ביט"ל ${Math.round(segBit)}%</span></div>`:''}
-    <div class="finnote">מע"מ שגבית: <b>${f(vat)}</b> — אינו שלך, מועבר למדינה; לא נכלל ב"נשאר לך".</div>`, 'gold');
+    ${isHistMonth
+      ? '<div class="finnote">החודש הזה מגיע מרישום היסטורי (Morning), שהוא סכום לפני מע"מ. המע"מ שנגבה בפועל אינו מפורט כאן.</div>'
+      : `<div class="finnote">מע"מ שגבית: <b>${f(vat)}</b> — אינו שלך, מועבר למדינה; לא נכלל ב"נשאר לך".</div>`}`, 'gold');
 
   const mRate = finMod('rate','שיעור מס אפקטיבי', (effRate*100).toFixed(1)+'%', `
     <div class="finnote">${esc(proj.basis)}${proj.isOverride?' · ידני':''} · מס שנתי צפוי ${f(proj.tax)}</div>
@@ -3183,7 +3238,7 @@ function renderFinance(){
     ${proj.isOverride?`<button class="btn sm ghost" style="margin-top:8px" onclick="saveAnnualEstimate(${y}, '')">↺ חזרה לחישוב אוטומטי</button>`:''}
     <div class="finnote">מס ההכנסה מדורג ושנתי, לא לפי חודש בודד. ערוך את הצפי וכל המספרים מתעדכנים.</div>`, 'gold');
 
-  const mCash = finMod('cash','תזרים · צפי כניסות', f(cf.expected), cf.body);
+  const mCash = finMod('cash','כניסות לחשבון · '+MONTH_NAMES[mo], f(cf.expected+cf.landed), cf.body, cf.expected>0?'gold':'');
   const mBreak = finMod('breakdown','ממה מורכב · '+MONTH_NAMES[mo], md.length?md.length+' עבודות':'—', finBreakdownBody(md));
 
   const pendingSum=byStatus.issued+byStatus.overdue;
@@ -3195,20 +3250,56 @@ function renderFinance(){
       <div class="fin-line"><span>טרם הופק</span><span class="num">${f(byStatus.unissued)}</span></div>
     </div>`);
 
-  const mYtd = finMod('ytd','מתחילת השנה · מדויק בפועל', f(yTake), `
-    <div class="finnote">מס מדורג על כל ההכנסה שכבר נכנסה השנה (המספר ש"מתכנס" לאמת בסוף השנה).</div>
+  const ytdTitle = closedYear ? 'כל '+y+' · חישוב סופי' : 'מתחילת השנה · מצטבר';
+  const mYtd = finMod('ytd', ytdTitle, f(yTake), `
+    <div class="finnote">${closedYear
+      ? 'שנה סגורה — מס מדורג על ההכנסה השנתית המלאה.'
+      : 'סכום החודשים שכבר עברו, לפי אותו שיעור מס אפקטיבי שמופיע בכל חודש. המספר יתכנס לאמת ככל שהשנה מתקדמת.'}</div>
     <div class="fin-lines">
       <div class="fin-line"><span>הכנסה מצטברת (לפני מע"מ)</span><span class="num">${f(yIncome)}</span></div>
       <div class="fin-line minus"><span>− מס הכנסה</span><span class="num">${f(yTax)}</span></div>
       <div class="fin-line minus"><span>− ביטוח לאומי</span><span class="num">${f(yBit)}</span></div>
-      <div class="fin-line total"><span>נשאר לך בפועל</span><span class="num">${f(yTake)}</span></div>
+      <div class="fin-line total"><span>נשאר לך</span><span class="num">${f(yTake)}</span></div>
     </div>`, 'good');
 
-  const mHist = finMod('hist','הכנסה היסטורית · Morning', histYear>0?f(histYear):'הוסף', finIncomeSectionBody(y));
+  const overlapWarn = overlaps.length
+    ? `<div class="notice" style="margin-bottom:10px;border-color:var(--warn);color:var(--text);font-size:12.5px;line-height:1.6">
+        <b>שים לב:</b> ${overlaps.length===1?'לחודש אחד':'ל־'+overlaps.length+' חודשים'} יש גם ימי עבודה וגם רישום היסטורי. במקרה כזה <b>הרישום ההיסטורי קובע</b> והוא זה שנספר — כדי שאותו כסף לא ייספר פעמיים.
+        <div class="faint" style="margin-top:4px">${overlaps.map(m=>esc(monthName(m))).join(' · ')}</div></div>`
+    : '';
+  const mHist = finMod('hist','הכנסה היסטורית · Morning', histYear>0?f(histYear):'הוסף', overlapWarn+finIncomeSectionBody(y));
 
   const heroSub = emptyMonth
-    ? 'אין עבודות החודש. הוסף ימי עבודה, או נווט לחודש אחר.'
-    : `הכנסת ${MONTH_NAMES[mo]}: ${f(income)} לפני מע"מ · שיעור מס אפקטיבי ${(effRate*100).toFixed(1)}%. לחץ על כרטיס לפירוט.`;
+    ? 'עדיין אין עבודות בחודש הזה. הוסף יום עבודה, או דפדף לחודש אחר.'
+    : `זה מה שיישאר לך בכיס מהעבודות של ${MONTH_NAMES[mo]}, אחרי מס הכנסה וביטוח לאומי.${isHistMonth?' החודש הזה מגיע מסנכרון Morning.':''}`;
+
+  // ── the two clocks ────────────────────────────────────────────────────────
+  const arrivalMonths=(()=>{
+    const set=new Set();
+    for(const w of md){ const e=expectedPayDate(w); if(e) set.add(monthKey(e)); }
+    return [...set].sort().map(k=>MONTH_NAMES[+k.slice(5,7)-1]);
+  })();
+  const sourceMonths=(()=>{
+    const set=new Set();
+    for(const w of all){ const e=expectedPayDate(w); if(e&&monthKey(e)===ym) set.add(monthKey(w.date)); }
+    return [...set].sort().map(k=>MONTH_NAMES[+k.slice(5,7)-1]);
+  })();
+  const clocks = emptyMonth ? '' : `
+    <div class="clocks">
+      <div class="clock work" onclick="openFinMod('breakdown')" title="פירוט העבודות">
+        <div class="clock-k">עבדת ב${MONTH_NAMES[mo]}</div>
+        <div class="clock-v">${f(cf.performed)}</div>
+        <div class="clock-s">${cf.performedDays} ${cf.performedDays===1?'יום צילום':'ימי צילום'} · כולל מע"מ</div>
+        <div class="clock-flow"><span class="ar">↓</span><span>${arrivalMonths.length?'הכסף הזה ייכנס לחשבון ב'+arrivalMonths.join(' · '):'טרם נקבע מועד כניסה'}</span></div>
+      </div>
+      <div class="clock inflow" onclick="openFinMod('cash')" title="פירוט הכניסות">
+        <div class="clock-k">נכנס לחשבון ב${MONTH_NAMES[mo]}</div>
+        <div class="clock-v">${f(cf.expected+cf.landed)}</div>
+        <div class="clock-s">${cf.landed>0?f(cf.landed)+' כבר נכנסו · ':''}${f(cf.expected)} עוד צפויים</div>
+        <div class="clock-flow"><span class="ar">↑</span><span>${sourceMonths.length?'מעבודות של '+sourceMonths.join(' · '):'אין כניסות צפויות החודש'}</span></div>
+      </div>
+    </div>
+    <div class="clocks-note">שני המספרים שונים בכוונה — עבודה שנעשית החודש נכנסת לחשבון רק בעוד חודש-חודשיים, לפי תנאי התשלום.</div>`;
 
   root.innerHTML=`
     <div class="fin-head">
@@ -3223,13 +3314,15 @@ function renderFinance(){
     </div>
 
     <div class="fin-hero">
-      <div class="fin-hero-k">כמה באמת שלך · ${MONTH_NAMES[mo]}</div>
+      <div class="fin-hero-k">כמה נשאר לך מהעבודה של ${MONTH_NAMES[mo]}</div>
       <div class="fin-hero-num">${f(takeM)}</div>
       <div class="fin-hero-sub">${heroSub}</div>
     </div>
 
+    ${clocks}
+
     <div class="fin-grid">
-      ${mCalc}${mCash}${mBreak}${mInv}${mRate}${mYtd}${mHist}
+      ${mCalc}${mBreak}${mCash}${mInv}${mRate}${mYtd}${mHist}
     </div>
 
     <div class="src" style="margin-top:16px">ההפרשות הן הערכה לחיסכון לפי שיעורי ${s.taxYear} · <a onclick="go('settings')" style="cursor:pointer;color:var(--info)">כוונון בהגדרות</a>. השומה הסופית נקבעת בסוף השנה מול רואה החשבון.</div>`;
