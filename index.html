@@ -261,7 +261,9 @@ label.fld input:focus,label.fld select:focus,label.fld textarea:focus{
 /* expenses list */
 /* ---------- Mail docs (receipts scanned out of Gmail) ---------- */
 .md-strip{display:grid;grid-template-columns:repeat(auto-fill,minmax(124px,1fr));gap:10px}
-.md-card{text-align:start;padding:12px 13px;border:1px solid var(--line);border-radius:12px;background:transparent;cursor:pointer;transition:border-color var(--t-fast) var(--ease-out),background var(--t-fast) var(--ease-out)}
+/* base `button{}` sets no color, so a <button> falls back to the UA's black buttontext —
+   invisible on this dark panel. Every button-shaped card must state its own colour. */
+.md-card{text-align:start;padding:12px 13px;border:1px solid var(--line);border-radius:12px;background:transparent;color:var(--text);font-family:inherit;cursor:pointer;transition:border-color var(--t-fast) var(--ease-out),background var(--t-fast) var(--ease-out)}
 .md-card:hover{border-color:var(--accent)}
 .md-card.on{border-color:var(--accent);background:color-mix(in srgb,var(--accent) 9%,transparent)}
 .md-c-m{font-size:12px;opacity:.65;margin-bottom:5px}
@@ -4965,7 +4967,7 @@ async function exportSignedPDF(){
 document.getElementById('signFile').addEventListener('change', e=>{ const f=e.target.files[0]; if(f) signLoadFile(f); e.target.value=''; });
 
 /* ---------- version + auto-update (keeps the installed PWA in sync with the site) ---------- */
-const APP_VERSION='2026.08.12.4';
+const APP_VERSION='2026.08.12.5';
 function setVersionLabels(){
   const a=document.getElementById('appVer'); if(a) a.textContent=APP_VERSION;
   const b=document.getElementById('appVerSettings'); if(b) b.textContent=APP_VERSION;
