@@ -3,11 +3,15 @@
    latest version when online, and falls back to cache only when offline.
    Cross-origin requests (CDN libraries, the Anthropic API, Supabase) pass straight
    through and are never intercepted. Bump CACHE (and APP_VERSION in index.html) each deploy. */
-const CACHE = 'cine-finance-2026.08.12.3';
+const CACHE = 'cine-finance-2026.08.12.4';
 const CORE  = ['./', './index.html', './manifest.webmanifest', './icon.svg'];
 
 self.addEventListener('install', e => {
-  // pre-cache the shell for offline use; do NOT skipWaiting — let the page opt in
+  /* Take over immediately. The old "let the page opt in" behaviour meant an open tab kept
+     serving the previous version until it was closed, so shipped changes looked like they had
+     never deployed — the owner hit this repeatedly. For a single-user app the cost of a tab
+     picking up new code on reload is far smaller than the cost of not trusting the updates. */
+  self.skipWaiting();
   e.waitUntil(caches.open(CACHE).then(c => c.addAll(CORE)).catch(() => {}));
 });
 
