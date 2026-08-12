@@ -266,6 +266,24 @@ label.fld input:focus,label.fld select:focus,label.fld textarea:focus{
 .exp-d b{display:block;font-size:15px;font-weight:700;line-height:1;font-variant-numeric:tabular-nums}
 .exp-d span{display:block;font-size:9px;color:var(--faint);text-transform:uppercase;letter-spacing:.4px;margin-top:2px}
 .exp-nm{font-size:13.5px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+/* manual multi-date picker inside the project card */
+.pk-cal{background:var(--bg2);border:1px solid var(--line);border-radius:12px;padding:12px}
+.pk-head{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:9px}
+.pk-head b{font-size:14px;font-weight:600}
+.pk-head button{background:transparent;border:1px solid var(--line2);color:var(--muted);border-radius:8px;width:28px;height:28px;font-size:15px;line-height:1;cursor:pointer;transition:color var(--t-fast) var(--ease-out),border-color var(--t-fast) var(--ease-out)}
+.pk-head button:hover{color:var(--accent);border-color:var(--accent-dim)}
+.pk-dow{display:grid;grid-template-columns:repeat(7,1fr);gap:3px;margin-bottom:4px}
+.pk-dow span{text-align:center;font-size:10.5px;color:var(--faint);font-weight:600}
+.pk-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:3px}
+.pk{background:var(--panel);border:1px solid transparent;border-radius:7px;color:var(--text);font:inherit;font-size:12.5px;
+  padding:7px 0;cursor:pointer;font-variant-numeric:tabular-nums;transition:background var(--t-fast) var(--ease-out),border-color var(--t-fast) var(--ease-out)}
+.pk:hover:not(:disabled){border-color:var(--accent-dim)}
+.pk:active:not(:disabled){transform:scale(.94)}
+.pk.o{color:var(--faint);background:transparent}
+.pk.td{border-color:var(--line2);font-weight:700}
+.pk.sel{background:var(--accent);color:#130f02;font-weight:700;border-color:var(--accent)}
+.pk.has{background:rgba(86,192,130,.16);color:var(--good);cursor:not-allowed;border-color:transparent}
+.pk-foot{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-top:10px;padding-top:9px;border-top:1px solid var(--line);font-size:12.5px;color:var(--muted)}
 /* "another device changed something" — shown instead of yanking the data out from under an open form */
 .remote-banner{
   position:fixed;inset-block-end:18px;inset-inline-start:50%;transform:translateX(50%);
@@ -2556,13 +2574,18 @@ function normalizeAllDates(){
    ============================================================ */
 let _editingProjId=null, _projReturnToWd=false, _projReturnToSched=false, _projColor=PROJECT_COLORS[0];
 function openProject(id, fromWorkday){
-  _editingProjId=id||null; _projReturnToWd=!!fromWorkday;
+  _editingProjId=id||null; _projReturnToWd=!!fromWorkday; _projReturnToSched=false;
   const contracts=load(LS.contracts,[]);
   const p = id? (projectById(id)||{}) : {color:nextProjColor()};
   _projColor = p.color||nextProjColor();
   document.getElementById('projTitle').textContent = id?'עריכת פרויקט':'פרויקט חדש';
   document.getElementById('projDelBtn').style.display = id?'inline-flex':'none';
+  /* If contractId points at a DELETED contract nothing matched, the select silently fell back to
+     "ללא חוזה", and the next save wrote null — wiping the link and repricing every day to ₪0.
+     Keep the dangling id as a visible option so saving preserves it. */
+  const stale = p.contractId && !contracts.some(c=>c.id===p.contractId);
   const cOpts='<option value="">— ללא חוזה —</option>'+
+    (stale?`<option value="${esc(p.contractId)}" selected>⚠ חוזה שנמחק — התנאים נשמרו על הימים</option>`:'')+
     contracts.map(c=>`<option value="${c.id}" ${p.contractId===c.id?'selected':''}>${esc(c.name||'חוזה')}${c.project?' · '+esc(c.project):''}</option>`).join('');
   document.getElementById('projBody').innerHTML=`
     <div class="grid" style="grid-template-columns:1fr 1fr">
@@ -2598,7 +2621,7 @@ let _genMode='range';
 /* switching range↔count rebuilt the whole section from defaults, throwing away a typed start
    date and the skip-Saturday choice — keep them across the swap */
 let _genKeep={start:null, end:null, count:null, skipSat:false, tentative:true};
-function resetGenState(){ _genKeep={start:null, end:null, count:null, skipSat:false, tentative:true}; }
+function resetGenState(){ _genKeep={start:null, end:null, count:null, skipSat:false, tentative:true}; _genPick=new Set(); _pickRef=null; }
 function readGenState(){
   const g=id=>document.getElementById(id);
   if(g('pj_genStart')&&g('pj_genStart').value) _genKeep.start=g('pj_genStart').value;
@@ -2608,6 +2631,42 @@ function readGenState(){
   if(g('pj_genTentative')) _genKeep.tentative=g('pj_genTentative').checked;
 }
 function setGenMode(m){ readGenState(); _genMode=m; renderGenSection(); }
+/* A shoot is rarely consecutive — 20 days scattered across two months is normal. Manual mode is
+   a month grid you click to pick exactly those dates, selection surviving month navigation. */
+let _genPick=new Set(), _pickRef=null;
+function togglePick(iso){ if(_genPick.has(iso)) _genPick.delete(iso); else _genPick.add(iso); renderPickCal(); }
+function pickMove(d){ _pickRef=new Date(_pickRef.getFullYear(), _pickRef.getMonth()+d, 1); renderPickCal(); }
+function clearPick(){ _genPick.clear(); renderPickCal(); }
+function renderPickCal(){
+  const el=document.getElementById('pj_pickCal'); if(!el) return;
+  if(!_pickRef) _pickRef=new Date();
+  const y=_pickRef.getFullYear(), m=_pickRef.getMonth();
+  const first=new Date(y,m,1);
+  const start=new Date(y,m,1-first.getDay());               // back to the Sunday of that week
+  const existing=new Set(load(LS.workdays,[]).filter(w=>w.projectId===_editingProjId).map(w=>normDate(w.date)));
+  const iso=d=>d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
+  const today=todayISO();
+  let cells='';
+  for(let i=0;i<42;i++){
+    const d=new Date(start.getFullYear(),start.getMonth(),start.getDate()+i);
+    const k=iso(d), other=d.getMonth()!==m, has=existing.has(k), sel=_genPick.has(k);
+    cells+=`<button type="button" class="pk${other?' o':''}${sel?' sel':''}${has?' has':''}${k===today?' td':''}"
+      ${has?'disabled title="כבר קיים בפרויקט"':`onclick="togglePick('${k}')"`}>${d.getDate()}</button>`;
+  }
+  const picked=[..._genPick].sort();
+  el.innerHTML=`
+    <div class="pk-head">
+      <button type="button" onclick="pickMove(-1)" title="חודש קודם">›</button>
+      <b>${MONTH_NAMES[m]} ${y}</b>
+      <button type="button" onclick="pickMove(1)" title="חודש הבא">‹</button>
+    </div>
+    <div class="pk-dow">${['א','ב','ג','ד','ה','ו','ש'].map(d=>`<span>${d}</span>`).join('')}</div>
+    <div class="pk-grid">${cells}</div>
+    <div class="pk-foot">
+      <span>${picked.length? `נבחרו <b>${picked.length}</b> ימים` : 'לחץ על תאריכים בלוח כדי לבחור'}</span>
+      ${picked.length?`<button type="button" class="btn sm ghost" onclick="clearPick()">נקה</button>`:''}
+    </div>`;
+}
 function renderGenSection(){
   const el=document.getElementById('pj_genSection'); if(!el) return;
   const today=todayISO();
@@ -2615,19 +2674,24 @@ function renderGenSection(){
   const tog=`<div class="viewtog" style="margin-bottom:10px">
     <button class="${_genMode==='range'?'on':''}" onclick="setGenMode('range')">טווח תאריכים</button>
     <button class="${_genMode==='count'?'on':''}" onclick="setGenMode('count')">מספר ימים</button>
+    <button class="${_genMode==='manual'?'on':''}" onclick="setGenMode('manual')">בחירה ידנית</button>
   </div>`;
-  const inputs = _genMode==='range'
-    ? `<label class="fld">מתאריך<input type="date" id="pj_genStart" value="${esc(start)}"></label>
-       <label class="fld">עד תאריך<input type="date" id="pj_genEnd" value="${esc(end)}"></label>`
-    : `<label class="fld">מתאריך<input type="date" id="pj_genStart" value="${esc(start)}"></label>
-       <label class="fld">מספר ימים<input type="number" id="pj_genCount" min="1" max="365" value="${esc(count)}"></label>`;
-  el.innerHTML=`${tog}
-    <div class="grid" style="grid-template-columns:1fr 1fr auto; align-items:end; gap:10px">
-      ${inputs}<button class="btn sm" onclick="generateDaysFromModal()">צור ימים</button>
-    </div>
-    <label class="fld" style="margin-top:8px"><span class="row" style="gap:8px"><input type="checkbox" id="pj_genSkipSat" ${_genKeep.skipSat?'checked':''} style="width:auto"> דלג על שבת</span></label>
-    <label class="fld" style="margin-top:4px"><span class="row" style="gap:8px"><input type="checkbox" id="pj_genTentative" ${_genKeep.tentative?'checked':''} style="width:auto"> ימים משוערים — עדיין לא סופיים</span></label>
+  const body = _genMode==='manual'
+    ? `<div id="pj_pickCal" class="pk-cal"></div>
+       <button class="btn sm primary" style="margin-top:10px" onclick="generateDaysFromModal()">צור את הימים שנבחרו</button>`
+    : `<div class="grid" style="grid-template-columns:1fr 1fr auto; align-items:end; gap:10px">
+        ${_genMode==='range'
+          ? `<label class="fld">מתאריך<input type="date" id="pj_genStart" value="${esc(start)}"></label>
+             <label class="fld">עד תאריך<input type="date" id="pj_genEnd" value="${esc(end)}"></label>`
+          : `<label class="fld">מתאריך<input type="date" id="pj_genStart" value="${esc(start)}"></label>
+             <label class="fld">מספר ימים<input type="number" id="pj_genCount" min="1" max="365" value="${esc(count)}"></label>`}
+        <button class="btn sm" onclick="generateDaysFromModal()">צור ימים</button>
+      </div>
+      <label class="fld" style="margin-top:8px"><span class="row" style="gap:8px"><input type="checkbox" id="pj_genSkipSat" ${_genKeep.skipSat?'checked':''} style="width:auto"> דלג על שבת</span></label>`;
+  el.innerHTML=`${tog}${body}
+    <label class="fld" style="margin-top:6px"><span class="row" style="gap:8px"><input type="checkbox" id="pj_genTentative" ${_genKeep.tentative?'checked':''} style="width:auto"> ימים משוערים — עדיין לא סופיים</span></label>
     <div class="faint" style="font-size:11.5px;margin-top:4px">ימים משוערים לא נספרים כהכנסה בפועל ולא מנפחים את הפרשת המס. אפשר לאשר כל יום בנפרד בהמשך.</div>`;
+  if(_genMode==='manual') renderPickCal();
 }
 function pickProjColor(c){
   _projColor=c;
@@ -2638,6 +2702,10 @@ function persistProjectFromModal(){
   const name=document.getElementById('pj_name').value.trim();
   if(!name){ alert('יש להזין שם פרויקט.'); return null; }
   const list=load(LS.projects,[]);
+  // two projects with the same name are indistinguishable in every dropdown, lane and legend,
+  // with days split arbitrarily between them
+  const clash=list.find(x=>x.id!==_editingProjId && (x.name||'').trim().toLowerCase()===name.toLowerCase());
+  if(clash && !confirm(`כבר קיים פרויקט בשם "${name}".\n\nשני פרויקטים באותו שם נראים זהים בכל הרשימות והימים יתפצלו ביניהם.\n\nליצור בכל זאת?`)) return null;
   const d={ name, client:document.getElementById('pj_client').value.trim(),
     contractId:document.getElementById('pj_contract').value||null,
     color:_projColor, notes:document.getElementById('pj_notes').value };
@@ -2685,14 +2753,20 @@ function writeProjectDays(projectId, dates, tentative){
 function generateDaysFromModal(){
   const isNew=!_editingProjId;
   const id=persistProjectFromModal(); if(!id) return;
-  const start=document.getElementById('pj_genStart').value;
-  const skipSat=document.getElementById('pj_genSkipSat').checked;
+  const startEl=document.getElementById('pj_genStart'), skipEl=document.getElementById('pj_genSkipSat');
+  const start=startEl?startEl.value:'';                       // absent in manual mode
+  const skipSat=skipEl?skipEl.checked:false;
   const tentEl=document.getElementById('pj_genTentative');
   const tentative=tentEl?tentEl.checked:true;
   const msg=document.getElementById('pj_genMsg');
   const fail=t=>{ if(msg){ msg.style.color='var(--bad)'; msg.textContent=t; } };
   let plan;
-  if(_genMode==='range'){
+  if(_genMode==='manual'){
+    const picked=[..._genPick].sort();
+    if(!picked.length) return fail('לא נבחרו תאריכים. לחץ על ימים בלוח.');
+    const existing=new Set(load(LS.workdays,[]).filter(w=>w.projectId===id).map(w=>normDate(w.date)));
+    plan={ dates:picked.filter(d=>!existing.has(d)), dup:picked.filter(d=>existing.has(d)) };
+  } else if(_genMode==='range'){
     const end=document.getElementById('pj_genEnd').value;
     if(!start || !end){ return fail('בחר תאריך התחלה ותאריך סיום.'); }
     if(end<start){ return fail('תאריך הסיום מוקדם מתאריך ההתחלה.'); }
@@ -2708,6 +2782,7 @@ function generateDaysFromModal(){
   // a mistyped year turns a 5-day shoot into hundreds of days — ask before writing
   if(plan.dates.length>60 && !confirm(`הפעולה תיצור ${plan.dates.length} ימי עבודה. להמשיך?`)) return;
   const created=writeProjectDays(id, plan.dates, tentative);
+  _genPick.clear();                                           // picked dates are now real days
   if(msg){ msg.style.color='var(--good)';
     msg.textContent=`✓ נוצרו ${created} ימי עבודה${tentative?' (משוערים)':''}.${plan.dup.length?` ${plan.dup.length} תאריכים כבר היו קיימים ודולגו.`:''}`; }
   /* On a BRAND-NEW project the days-editor block isn't in the DOM yet (openProject only renders
@@ -2784,16 +2859,6 @@ function deleteProjDayInline(wdId){
   if(!confirm('למחוק יום זה?')) return;
   save(LS.workdays, load(LS.workdays,[]).filter(w=>w.id!==wdId));
   renderProjDaysEditor(_editingProjId); refreshView();
-}
-function addProjDayInline(){
-  const projId=_editingProjId; if(!projId) return;
-  const days=load(LS.workdays,[]).filter(w=>w.projectId===projId).sort((a,b)=>(a.date||'').localeCompare(b.date||''));
-  const last=days.length?days[days.length-1].date:todayISO();
-  const nd=new Date(last+'T00:00:00'); nd.setDate(nd.getDate()+1);
-  const iso=nd.getFullYear()+'-'+String(nd.getMonth()+1).padStart(2,'0')+'-'+String(nd.getDate()).padStart(2,'0');
-  const list=load(LS.workdays,[]);
-  list.push({id:uid(),projectId:projId,date:iso,status:'unissued',tentative:false,createdAt:Date.now()});
-  save(LS.workdays,list); renderProjDaysEditor(projId); refreshView();
 }
 /* Moving a day that has already been invoiced or paid drags it into a different VAT period and
    breaks the per-month invoice grouping. It used to do that silently, with no confirmation, and
@@ -3015,24 +3080,29 @@ function calGoToday(){ _calRef=new Date(); closeCalPicker(); renderCalendar(); }
 function projectStats(projId, allDays){
   const days=(allDays||load(LS.workdays,[])).filter(w=>w.projectId===projId);
   const today=todayISO();
-  let gross=0,paid=0,outstanding=0,tentative=0,future=0,performed=0,minD='',maxD='';
+  let gross=0,paid=0,outstanding=0,tentative=0,future=0,performed=0,undated=0,minD='',maxD='';
   for(const w of days){
     const d=normDate(w.date)||'';
     if(d){ if(!minD||d<minD) minD=d; if(!maxD||d>maxD) maxD=d; }
     const amt=computePay(w).total;
-    if(w.tentative===true){ tentative+=amt; if(d>=today) future++; continue; }
+    // a day with NO date is not "performed" — it used to fail d>today and be counted as done
+    const ahead = d==='' ? null : d>today;
+    if(w.tentative===true){ tentative+=amt; if(ahead!==false) future++; continue; }
     gross+=amt;
     if(w.status==='paid') paid+=amt; else outstanding+=amt;
-    if(d>today) future++; else performed++;
+    if(ahead===null) undated++; else if(ahead) future++; else performed++;
   }
   let status='empty';
   if(days.length){
     if(performed===0 && future>0) status='planned';
     else if(future>0) status='active';
     else if(outstanding>0) status='awaiting';
+    // an all-tentative project whose dates have passed has gross 0 and nothing outstanding —
+    // it used to land in "הושלמו ושולמו" showing ₪0. It never actually happened.
+    else if(gross===0) status='planned';
     else status='done';
   }
-  return {n:days.length,gross,paid,outstanding,tentative,future,performed,minD,maxD,status};
+  return {n:days.length,gross,paid,outstanding,tentative,future,performed,undated,minD,maxD,status};
 }
 const PROJ_LANES=[
   ['active',  'פעילים',         'נותרו ימי צילום',                  'var(--accent)'],
@@ -3058,10 +3128,15 @@ function renderDashboard(){
   const todayStr=now.toISOString().slice(0,10);
   const monthNames=MONTH_NAMES;
 
-  const month=workdays.filter(w=>(w.date||'').startsWith(ym) && w.tentative!==true);
-  const monthTent=workdays.filter(w=>(w.date||'').startsWith(ym) && w.tentative===true).length;
-  let monthExVat=0;
-  for(const w of month){ monthExVat+=computePay(w).sub; }   // work performed this month only (historical is a yearly sync, not "this month")
+  const month=workdays.filter(w=>monthKey(w.date)===ym && w.tentative!==true);
+  const monthTent=workdays.filter(w=>monthKey(w.date)===ym && w.tentative===true).length;
+  /* Split what has actually happened from what is still scheduled. On the 1st of a month the
+     hero used to show the WHOLE month's take-home as if it were already earned. */
+  let monthExVat=0, doneExVat=0, doneDays=0, aheadDays=0;
+  for(const w of month){
+    const sub=computePay(w).sub; monthExVat+=sub;
+    if((normDate(w.date)||'')<=todayStr){ doneExVat+=sub; doneDays++; } else aheadDays++;
+  }
   const _proj=annualProjection(now.getFullYear());
   const taxM=monthExVat*_proj.effRate, bit=bituachMonthly(monthExVat);   // annual effective rate, not month×12
   const take=Math.max(0, monthExVat-taxM-bit);
@@ -3125,8 +3200,8 @@ function renderDashboard(){
 
   // ---- one strip instead of four look-alike cards ----
   const strip=[
-    ['ימי עבודה החודש', month.length, monthTent?monthTent+' משוערים נוספים':'', '', 'month'],
-    ['הכנסה החודש', f(monthExVat), 'לפני מע"מ', '', 'month'],
+    ['ימי עבודה החודש', month.length, aheadDays?`${doneDays} בוצעו · ${aheadDays} עוד לפנינו`:(monthTent?monthTent+' משוערים נוספים':''), '', 'month'],
+    ['הכנסה החודש', f(monthExVat), aheadDays?`${f(doneExVat)} כבר בוצע`:'לפני מע"מ', '', 'month'],
     ['ממתין לתשלום', f(owed), nOpen?nOpen+(nOpen===1?' יום פתוח':' ימים פתוחים'):'הכול נגבה', overdue>0?'bad':(owed>0?'gold':'good'), 'open'],
     ['ימים מתוכננים', upcomingAll.length, upcomingAll.length?'מהיום והלאה':'אין ימים עתידיים', '', 'upcoming'],
   ];
@@ -3231,7 +3306,7 @@ function renderDashboard(){
       <div class="dash-hero-main clickable" onclick="dashOpen('take')" title="פירוט ימי העבודה וההכנסה החודש">
         <div class="k">כמה באמת שלך · ${monthNames[now.getMonth()]}</div>
         <div class="big-num">${f(take)}</div>
-        <div class="sub">אחרי מס הכנסה מדורג + ביטוח לאומי · שיעורי ${s.taxYear}. מע"מ נגבה בנפרד ומועבר למדינה — אינו שלך.</div>
+        <div class="sub">${aheadDays?`כולל ${aheadDays} ${aheadDays===1?'יום שעוד לא בוצע':'ימים שעוד לא בוצעו'} החודש. `:''}אחרי מס הכנסה מדורג + ביטוח לאומי · שיעורי ${s.taxYear}. מע"מ נגבה בנפרד ומועבר למדינה — אינו שלך.</div>
       </div>
       ${heroBreak}
     </div>
@@ -3290,8 +3365,12 @@ function finCashflowData(ym){
   const f=n=>fmtMoney(Math.round(n));
   const all=load(LS.workdays,[]).filter(w=>w.tentative!==true);
   const curYm=todayISO().slice(0,7);
-  let performed=0, performedDays=0;
-  for(const w of all){ if(monthKey(w.date)===ym){ performed+=computePay(w).total; performedDays++; } }
+  const today=todayISO();
+  let performed=0, performedDays=0, aheadDays=0;
+  for(const w of all){ if(monthKey(w.date)!==ym) continue;
+    performed+=computePay(w).total; performedDays++;
+    if((normDate(w.date)||'')>today) aheadDays++;   // scheduled, not yet shot
+  }
   const arrivals=all.filter(w=>{ const e=expectedPayDate(w); return e && monthKey(e)===ym; })
     .sort((a,b)=>(a.date||'').localeCompare(b.date||''));
   /* headline and list used to disagree: the total excluded paid days while the list below it
@@ -3332,7 +3411,7 @@ function finCashflowData(ym){
     ${unpaidRows?`<div class="fin-list">${unpaidRows}</div>`:'<div class="faint" style="font-size:13px;padding:4px 0">אין תשלומים שממתינים להיכנס החודש.</div>'}
     ${paidRows?`<div class="fin-sub-h">כבר נכנס</div><div class="fin-list">${paidRows}</div>`:''}
     ${late>0?`<div class="fin-sub-h" style="color:var(--bad)">היה אמור להיכנס כבר · ${f(late)}</div><div class="fin-list">${lateRows}</div>`:''}`;
-  return { performed, performedDays, expected, landed, late, body };
+  return { performed, performedDays, aheadDays, expected, landed, late, body };
 }
 /* body: the work days behind a month's income */
 function finBreakdownBody(md){
@@ -3401,8 +3480,24 @@ function renderFinance(){
   const nowY=new Date().getFullYear(), closedYear=y<nowY;
   let yIncome=0; for(const k in byM) yIncome+=byM[k];
   const yProfit=Math.max(0, yIncome-expY.deductible);
-  const perMonthProfit=[]; for(const k in byM) perMonthProfit.push(Math.max(0, byM[k]-expensesForMonth(k).deductible));
+  /* Bituach Leumi is banded and capped MONTHLY, so it must be walked month by month — and every
+     month up to now, not only the ones that happen to hold income, otherwise an idle month never
+     takes the statutory minimum. */
+  const lastMo = closedYear ? 11 : new Date().getMonth();
+  const perMonthProfit=[];
+  for(let i=0;i<=lastMo;i++){
+    const k=y+'-'+String(i+1).padStart(2,'0');
+    perMonthProfit.push(Math.max(0,(byM[k]||0)-expensesForMonth(k).deductible));
+  }
   let yBit=0; for(const p of perMonthProfit) yBit+=bituachMonthly(p);
+  /* One row holding a whole year's income under-charges Bituach ~2.7x, because the monthly ceiling
+     flattens it. Flag any month that dwarfs the rest so it can be split. */
+  const lumpMonths=(()=>{
+    const vals=Object.entries(byM).filter(([,v])=>v>0);
+    if(vals.length<2) return [];
+    const med=vals.map(([,v])=>v).sort((a,b)=>a-b)[Math.floor(vals.length/2)];
+    return vals.filter(([,v])=>v>med*3).map(([k])=>k);
+  })();
   /* A closed year can use the real progressive calculation. A year in progress cannot: applying
      a full year's credit points and low brackets to a partial year produced a "מדויק בפועל"
      figure thousands of ₪ apart from the sum of the same months' cards. Mid-year we pro-rate
@@ -3491,7 +3586,13 @@ function renderFinance(){
         <b>שים לב:</b> ${overlaps.length===1?'לחודש אחד':'ל־'+overlaps.length+' חודשים'} יש גם ימי עבודה וגם רישום היסטורי. במקרה כזה <b>הרישום ההיסטורי קובע</b> והוא זה שנספר — כדי שאותו כסף לא ייספר פעמיים.
         <div class="faint" style="margin-top:4px">${overlaps.map(m=>esc(monthName(m))).join(' · ')}</div></div>`
     : '';
-  const mHist = finMod('hist','הכנסה היסטורית · Morning', histYear>0?f(histYear):'הוסף', overlapWarn+finIncomeSectionBody(y));
+  const lumpWarn = lumpMonths.length
+    ? `<div class="notice" style="margin-bottom:10px;border-color:var(--warn);color:var(--text);font-size:12.5px;line-height:1.6">
+        <b>ייתכן שסכום של כמה חודשים נרשם בחודש אחד:</b> ${lumpMonths.map(m=>esc(monthName(m))).join(' · ')}.
+        ביטוח לאומי מחושב <b>לפי חודש</b> ויש לו תקרה חודשית, אז ריכוז של שנה שלמה בשורה אחת מקטין את ההפרשה בטעות.
+        עדיף לפצל לפי החודשים שבהם ההכנסה התקבלה בפועל.</div>`
+    : '';
+  const mHist = finMod('hist','הכנסה היסטורית · Morning', histYear>0?f(histYear):'הוסף', overlapWarn+lumpWarn+finIncomeSectionBody(y));
 
   const heroSub = emptyMonth
     ? 'עדיין אין עבודות בחודש הזה. הוסף יום עבודה, או דפדף לחודש אחר.'
@@ -3513,7 +3614,7 @@ function renderFinance(){
       <div class="clock work" onclick="openFinMod('breakdown')" title="פירוט העבודות">
         <div class="clock-k">עבדת ב${MONTH_NAMES[mo]}</div>
         <div class="clock-v">${f(cf.performed)}</div>
-        <div class="clock-s">${cf.performedDays} ${cf.performedDays===1?'יום צילום':'ימי צילום'} · כולל מע"מ</div>
+        <div class="clock-s">${cf.performedDays} ${cf.performedDays===1?'יום צילום':'ימי צילום'} · כולל מע"מ${cf.aheadDays?` · <span style="color:var(--warn)">${cf.aheadDays} עוד לא בוצעו</span>`:''}</div>
         <div class="clock-flow"><span class="ar">↓</span><span>${arrivalMonths.length?'הכסף הזה ייכנס לחשבון ב'+arrivalMonths.join(' · '):'טרם נקבע מועד כניסה'}</span></div>
       </div>
       <div class="clock inflow" onclick="openFinMod('cash')" title="פירוט הכניסות">
@@ -3790,10 +3891,12 @@ function incomeSave(){
     document.querySelectorAll('#incomeBody .pm-row').forEach(row=>{
       const keep=row.querySelector('.inc-keep'); if(keep && !keep.checked) return;
       const el=row.querySelector('.inc-amt'); if(!el) return;
-      const month=el.dataset.month, amt=el.value===''?0:Number(el.value);
-      if(month && amt){
+      const month=el.dataset.month, amt=el.value===''?null:Number(el.value);
+      // a month the owner deliberately zeroes must be SAVED as 0, not skipped as falsy
+      if(month && amt!=null && !isNaN(amt)){
         const i=list.findIndex(e=>e.month===month);
-        const rec={id:(i>=0?list[i].id:uid()),month,amountExVat:+amt||0,source:'Morning',note:'',createdAt:(i>=0?list[i].createdAt:Date.now())};
+        const rec={id:(i>=0?list[i].id:uid()),month,amountExVat:amt,source:'Morning',
+          note:(i>=0?list[i].note:'')||'',createdAt:(i>=0?list[i].createdAt:Date.now())};
         if(i>=0) list[i]=rec; else list.push(rec);
         n++;
       }
@@ -3807,14 +3910,42 @@ function incomeSave(){
   if(!month){ alert('בחר חודש.'); return; }
   if(amtStr===''||isNaN(+amtStr)){ alert('הזן סכום.'); return; }
   const note=document.getElementById('inc_note').value;
-  if(_incomeEditId){ const old=getIncome().find(x=>x.id===_incomeEditId); if(old && old.month!==month) setIncome(getIncome().filter(x=>x.id!==_incomeEditId)); }
-  upsertIncome(month, +amtStr, '', note);
+  const prev=_incomeEditId? getIncome().find(x=>x.id===_incomeEditId) : getIncome().find(x=>x.month===month);
+  if(_incomeEditId && prev && prev.month!==month) setIncome(getIncome().filter(x=>x.id!==_incomeEditId));
+  // editing a Morning-imported row used to strip its provenance and relabel it "הזנה ידנית"
+  upsertIncome(month, +amtStr, (prev&&prev.source)||'', note);
   closeModal('incomeModal'); renderFinance();
 }
 function deleteIncomeEntry(id){ if(!confirm('למחוק את רשומת ההכנסה?')) return; setIncome(getIncome().filter(e=>e.id!==id)); renderFinance(); }
 
 /* ---------- Modal helpers ---------- */
 function openModal(id){ document.getElementById(id).classList.add('open'); }
+/* Every modal had exactly one way out: its own × or Cancel button. No Escape, no backdrop click.
+   Each modal declares how it wants to be dismissed so the shared handlers can respect the
+   return-to-parent flows (a work day opened from a project card must hand back to it). */
+const MODAL_CLOSERS={ wdModal:()=>closeWdModal(), projModal:()=>closeProjModal(), schedModal:()=>cancelSchedModal() };
+function topModal(){ const all=[...document.querySelectorAll('.modal-bg.open')]; if(!all.length) return null;
+  return all.sort((a,b)=>(+getComputedStyle(a).zIndex||50)-(+getComputedStyle(b).zIndex||50)).pop(); }
+function dismissTopModal(){
+  const el=topModal(); if(!el) return false;
+  const fn=MODAL_CLOSERS[el.id];
+  if(fn) fn(); else closeModal(el.id);
+  return true;
+}
+document.addEventListener('keydown', e=>{
+  if(e.key!=='Escape') return;
+  // let a native picker / open <select> swallow its own Escape first
+  const tag=(e.target&&e.target.tagName||'').toLowerCase();
+  if(tag==='select') return;
+  if(dismissTopModal()) e.preventDefault();
+});
+document.addEventListener('mousedown', e=>{
+  // click the dimmed backdrop (not the panel) to dismiss — only when it IS the top modal
+  if(!e.target.classList || !e.target.classList.contains('modal-bg')) return;
+  if(e.target!==topModal()) return;
+  const fn=MODAL_CLOSERS[e.target.id];
+  if(fn) fn(); else closeModal(e.target.id);
+});
 function closeModal(id){
   document.getElementById(id).classList.remove('open');
   // if this was the last open modal, apply anything that arrived from another device meanwhile
