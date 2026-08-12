@@ -266,6 +266,16 @@ label.fld input:focus,label.fld select:focus,label.fld textarea:focus{
 .exp-d b{display:block;font-size:15px;font-weight:700;line-height:1;font-variant-numeric:tabular-nums}
 .exp-d span{display:block;font-size:9px;color:var(--faint);text-transform:uppercase;letter-spacing:.4px;margin-top:2px}
 .exp-nm{font-size:13.5px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+/* "another device changed something" — shown instead of yanking the data out from under an open form */
+.remote-banner{
+  position:fixed;inset-block-end:18px;inset-inline-start:50%;transform:translateX(50%);
+  background:var(--panel2);border:1px solid var(--accent-dim);border-radius:99px;
+  padding:10px 18px;font-size:13px;color:var(--text);z-index:80;
+  display:flex;align-items:center;gap:12px;box-shadow:0 8px 30px rgba(0,0,0,.5);
+  animation:dIn .22s var(--ease-out) both;
+}
+.remote-banner button{background:var(--accent);color:#130f02;border:0;border-radius:99px;padding:5px 13px;font:inherit;font-size:12.5px;font-weight:700;cursor:pointer}
+@media(max-width:760px){ .remote-banner{inset-inline:12px;inset-inline-start:auto;transform:none;justify-content:space-between;inset-block-end:76px} }
 /* The two clocks. The single thing that confuses people about freelance money: the month you
    WORKED and the month the money ARRIVES are never the same month. Give each its own panel. */
 .clocks{display:grid;grid-template-columns:1fr 1fr;gap:13px;margin-bottom:8px}
@@ -436,6 +446,10 @@ table.data .gross{color:var(--accent);font-weight:600}
 .rowdel:hover{color:var(--bad);background:rgba(232,104,95,.1)}
 .summ-bar{display:flex;flex-wrap:wrap;gap:10px;margin-bottom:18px}
 .summ{flex:1;background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:15px 18px;min-width:140px;transition:border-color var(--t-base) var(--ease-out),transform var(--t-base) var(--ease-out)}
+.summ.clickable{cursor:pointer}
+.summ.clickable:hover{border-color:var(--accent-dim)}
+.summ small{display:block;color:var(--faint);font-size:11px;margin-top:5px}
+.summ .v.gold{color:var(--accent)}
 .summ:hover{border-color:var(--line2);transform:translateY(-1px)}
 .summ .k{color:var(--faint);font-size:11px;margin-bottom:8px;letter-spacing:.5px;text-transform:uppercase;font-weight:500}
 .summ .v{font-size:22px;font-weight:700;font-variant-numeric:tabular-nums;line-height:1.05;letter-spacing:-.4px}
@@ -2028,6 +2042,13 @@ let _wdOpenGroups=new Set();   // which project groups are expanded in "by proje
 let _wdShowExVat=false;        // toggle: show the pre-VAT amount alongside the incl-VAT amount
 /* a confirmed day whose date has passed but no invoice was issued yet → you still need to invoice it */
 function needsInvoice(w){ return w.tentative!==true && (w.status||'unissued')==='unissued' && normDate(w.date) < todayISO(); }
+/* THE definition of "money someone owes you": real work, already performed, not yet paid.
+   Three places used to answer this question three different ways under the same Hebrew label —
+   the work-days summary counted future days, the dashboard tile didn't, and the tile's own
+   drill-down produced a third set. One predicate now feeds all of them. */
+function isOwed(w){
+  return w.tentative!==true && (normDate(w.date)||'') < todayISO() && (w.status||'unissued')!=='paid';
+}
 function renderWorkdays(){
   const list=load(LS.workdays,[]).slice().sort((a,b)=>{
     const da=normDate(a.date), db=normDate(b.date);
@@ -2049,8 +2070,7 @@ function renderWorkdays(){
   else if(_wdFilter==='issued') rows=list.filter(w=>w.status==='issued' && w.tentative!==true);
   else if(_wdFilter==='overdue') rows=list.filter(w=>w.status==='overdue' && w.tentative!==true);
   // "open" = every day already performed whose money has not landed — invoiced or not
-  else if(_wdFilter==='open'){ const t=todayISO();
-    rows=list.filter(w=>w.tentative!==true && (normDate(w.date)||'')<t && (w.status||'unissued')!=='paid'); }
+  else if(_wdFilter==='open') rows=list.filter(isOwed);
   // ---- dashboard drill-downs: show exactly what the clicked tile counted ----
   else if(_wdFilter==='month'){ const now=new Date(), ym=now.getFullYear()+'-'+String(now.getMonth()+1).padStart(2,'0'); rows=list.filter(w=>(w.date||'').startsWith(ym) && w.tentative!==true); }
   else if(_wdFilter==='upcoming'){ const today=todayISO(); rows=list.filter(w=>normDate(w.date)>=today); }
@@ -2303,13 +2323,14 @@ function renderWdSummary(list){
   const month=list.filter(w=>(w.date||'').startsWith(ym) && w.tentative!==true);
   let gross=0, exVat=0, owed=0;
   for(const w of month){ const p=computePay(w); gross+=p.total; exVat+=p.sub; }
-  for(const w of list){ if(w.tentative===true) continue; const p=computePay(w); if(w.status==='issued'||w.status==='overdue') owed+=p.total; }
+  let owedN=0;
+  for(const w of list){ if(!isOwed(w)) continue; owed+=computePay(w).total; owedN++; }
   const el=document.getElementById('wdSumm');
   el.innerHTML=
     `<div class="summ"><div class="k">ימי עבודה החודש</div><div class="v">${month.length}</div></div>`+
     `<div class="summ"><div class="k">הכנסה החודש (כולל מע"מ)</div><div class="v gold">${fmtMoney(Math.round(gross))}</div></div>`+
     `<div class="summ"><div class="k">מתוכם לפני מע"מ</div><div class="v">${fmtMoney(Math.round(exVat))}</div></div>`+
-    `<div class="summ"><div class="k">ממתין לתשלום</div><div class="v">${fmtMoney(Math.round(owed))}</div></div>`;
+    `<div class="summ clickable" onclick="setWdFilter('open')" title="ימים שבוצעו וטרם נגבו"><div class="k">ממתין לתשלום</div><div class="v ${owed>0?'gold':''}">${fmtMoney(Math.round(owed))}</div><small>${owedN} ${owedN===1?'יום שבוצע':'ימים שבוצעו'}</small></div>`;
 }
 
 /* ---------- Work day modal ---------- */
@@ -2525,8 +2546,8 @@ function normDate(s){
 function normalizeAllDates(){
   const wds=load(LS.workdays,[]); let changed=false;
   for(const w of wds){ if(w.date){ const n=normDate(w.date); if(n!==w.date){ w.date=n; changed=true; } } }
-  if(changed) localStorage.setItem(LS.workdays, JSON.stringify(wds));
-  return changed;
+  if(changed) save(LS.workdays, wds);   // was a raw setItem — the canonical dates never reached
+  return changed;                       // the cloud or the backup file, so every device re-fixed them each boot
 }
 
 /* ============================================================
@@ -2568,29 +2589,45 @@ function openProject(id, fromWorkday){
       <div id="pj_daysEditorWrap"></div>
     </div>`:''}
     <div id="pj_genMsg" style="font-size:12.5px;margin-top:8px;min-height:16px;color:var(--good)"></div>`;
+  resetGenState();
   renderGenSection();
   if(id) renderProjDaysEditor(id);
   openModal('projModal');
 }
 let _genMode='range';
-function setGenMode(m){ _genMode=m; renderGenSection(); }
+/* switching range↔count rebuilt the whole section from defaults, throwing away a typed start
+   date and the skip-Saturday choice — keep them across the swap */
+let _genKeep={start:null, end:null, count:null, skipSat:false, tentative:true};
+function resetGenState(){ _genKeep={start:null, end:null, count:null, skipSat:false, tentative:true}; }
+function readGenState(){
+  const g=id=>document.getElementById(id);
+  if(g('pj_genStart')&&g('pj_genStart').value) _genKeep.start=g('pj_genStart').value;
+  if(g('pj_genEnd')&&g('pj_genEnd').value) _genKeep.end=g('pj_genEnd').value;
+  if(g('pj_genCount')&&g('pj_genCount').value) _genKeep.count=g('pj_genCount').value;
+  if(g('pj_genSkipSat')) _genKeep.skipSat=g('pj_genSkipSat').checked;
+  if(g('pj_genTentative')) _genKeep.tentative=g('pj_genTentative').checked;
+}
+function setGenMode(m){ readGenState(); _genMode=m; renderGenSection(); }
 function renderGenSection(){
   const el=document.getElementById('pj_genSection'); if(!el) return;
   const today=todayISO();
+  const start=_genKeep.start||today, end=_genKeep.end||today, count=_genKeep.count||'14';
   const tog=`<div class="viewtog" style="margin-bottom:10px">
     <button class="${_genMode==='range'?'on':''}" onclick="setGenMode('range')">טווח תאריכים</button>
     <button class="${_genMode==='count'?'on':''}" onclick="setGenMode('count')">מספר ימים</button>
   </div>`;
   const inputs = _genMode==='range'
-    ? `<label class="fld">מתאריך<input type="date" id="pj_genStart" value="${today}"></label>
-       <label class="fld">עד תאריך<input type="date" id="pj_genEnd" value="${today}"></label>`
-    : `<label class="fld">מתאריך<input type="date" id="pj_genStart" value="${today}"></label>
-       <label class="fld">מספר ימים<input type="number" id="pj_genCount" min="1" value="14"></label>`;
+    ? `<label class="fld">מתאריך<input type="date" id="pj_genStart" value="${esc(start)}"></label>
+       <label class="fld">עד תאריך<input type="date" id="pj_genEnd" value="${esc(end)}"></label>`
+    : `<label class="fld">מתאריך<input type="date" id="pj_genStart" value="${esc(start)}"></label>
+       <label class="fld">מספר ימים<input type="number" id="pj_genCount" min="1" max="365" value="${esc(count)}"></label>`;
   el.innerHTML=`${tog}
     <div class="grid" style="grid-template-columns:1fr 1fr auto; align-items:end; gap:10px">
       ${inputs}<button class="btn sm" onclick="generateDaysFromModal()">צור ימים</button>
     </div>
-    <label class="fld" style="margin-top:8px"><span class="row" style="gap:8px"><input type="checkbox" id="pj_genSkipSat" style="width:auto"> דלג על שבת</span></label>`;
+    <label class="fld" style="margin-top:8px"><span class="row" style="gap:8px"><input type="checkbox" id="pj_genSkipSat" ${_genKeep.skipSat?'checked':''} style="width:auto"> דלג על שבת</span></label>
+    <label class="fld" style="margin-top:4px"><span class="row" style="gap:8px"><input type="checkbox" id="pj_genTentative" ${_genKeep.tentative?'checked':''} style="width:auto"> ימים משוערים — עדיין לא סופיים</span></label>
+    <div class="faint" style="font-size:11.5px;margin-top:4px">ימים משוערים לא נספרים כהכנסה בפועל ולא מנפחים את הפרשת המס. אפשר לאשר כל יום בנפרד בהמשך.</div>`;
 }
 function pickProjColor(c){
   _projColor=c;
@@ -2619,56 +2656,66 @@ function saveProject(){
   else { refreshView(); }   // project rows live on the dashboard too — re-render whichever view is open
 }
 /* generate N consecutive work days under a project, all inheriting its terms */
-function generateProjectDays(projectId, startISO, count, skipSat){
-  const list=load(LS.workdays,[]); let created=0;
+/* Collect the dates a generator would produce, WITHOUT writing them. Lets the caller count them,
+   confirm a large batch, and skip dates the project already has — nothing here de-duplicated
+   before, so pressing "צור ימים" twice silently produced a second identical set. */
+function planProjectDays(projectId, startISO, opts){
+  const existing=new Set(load(LS.workdays,[]).filter(w=>w.projectId===projectId).map(w=>normDate(w.date)));
+  const dates=[]; const dup=[];
   const d=new Date(startISO+'T00:00:00');
-  let guard=0;
-  while(created<count && guard++<1000){
-    if(!(skipSat && d.getDay()===6)){
+  const end=opts.endISO? new Date(opts.endISO+'T00:00:00') : null;
+  let made=0, guard=0;
+  while(guard++<3000){
+    if(end){ if(d>end) break; } else if(made>=opts.count) break;
+    if(!(opts.skipSat && d.getDay()===6)){
       const iso=d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
-      list.push({ id:uid(), projectId, date:iso, status:'unissued', tentative:false, createdAt:Date.now() });
-      created++;
+      if(existing.has(iso)) dup.push(iso); else dates.push(iso);
+      made++;
     }
     d.setDate(d.getDate()+1);
   }
-  save(LS.workdays,list);
-  return created;
+  return { dates, dup };
 }
-/* generate every consecutive day between two dates (inclusive) under a project */
-function generateProjectDaysRange(projectId, startISO, endISO, skipSat){
-  const list=load(LS.workdays,[]); let created=0;
-  const d=new Date(startISO+'T00:00:00'), end=new Date(endISO+'T00:00:00');
-  let guard=0;
-  while(d<=end && guard++<2000){
-    if(!(skipSat && d.getDay()===6)){
-      const iso=d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
-      list.push({ id:uid(), projectId, date:iso, status:'unissued', tentative:false, createdAt:Date.now() });
-      created++;
-    }
-    d.setDate(d.getDate()+1);
-  }
+function writeProjectDays(projectId, dates, tentative){
+  const list=load(LS.workdays,[]);
+  for(const iso of dates) list.push({ id:uid(), projectId, date:iso, status:'unissued', tentative:!!tentative, createdAt:Date.now() });
   save(LS.workdays,list);
-  return created;
+  return dates.length;
 }
 function generateDaysFromModal(){
+  const isNew=!_editingProjId;
   const id=persistProjectFromModal(); if(!id) return;
   const start=document.getElementById('pj_genStart').value;
   const skipSat=document.getElementById('pj_genSkipSat').checked;
+  const tentEl=document.getElementById('pj_genTentative');
+  const tentative=tentEl?tentEl.checked:true;
   const msg=document.getElementById('pj_genMsg');
-  const fail=t=>{ msg.style.color='var(--bad)'; msg.textContent=t; };
-  let created;
+  const fail=t=>{ if(msg){ msg.style.color='var(--bad)'; msg.textContent=t; } };
+  let plan;
   if(_genMode==='range'){
     const end=document.getElementById('pj_genEnd').value;
     if(!start || !end){ return fail('בחר תאריך התחלה ותאריך סיום.'); }
     if(end<start){ return fail('תאריך הסיום מוקדם מתאריך ההתחלה.'); }
-    created=generateProjectDaysRange(id, start, end, skipSat);
+    plan=planProjectDays(id, start, {endISO:end, skipSat});
   } else {
     const count=parseInt(document.getElementById('pj_genCount').value,10);
     if(!start || !count || count<1){ return fail('בחר תאריך התחלה ומספר ימים תקין.'); }
-    created=generateProjectDays(id, start, count, skipSat);
+    plan=planProjectDays(id, start, {count, skipSat});
   }
-  if(msg){ msg.style.color='var(--good)'; msg.textContent=`✓ נוצרו ${created} ימי עבודה. כל יום ניתן לעריכה/מחיקה בנפרד.`; }
-  renderProjDaysEditor(id);
+  if(!plan.dates.length){
+    return fail(plan.dup.length? `כל ${plan.dup.length} התאריכים כבר קיימים בפרויקט — לא נוצר דבר.` : 'לא נוצרו ימים.');
+  }
+  // a mistyped year turns a 5-day shoot into hundreds of days — ask before writing
+  if(plan.dates.length>60 && !confirm(`הפעולה תיצור ${plan.dates.length} ימי עבודה. להמשיך?`)) return;
+  const created=writeProjectDays(id, plan.dates, tentative);
+  if(msg){ msg.style.color='var(--good)';
+    msg.textContent=`✓ נוצרו ${created} ימי עבודה${tentative?' (משוערים)':''}.${plan.dup.length?` ${plan.dup.length} תאריכים כבר היו קיימים ודולגו.`:''}`; }
+  /* On a BRAND-NEW project the days-editor block isn't in the DOM yet (openProject only renders
+     it for a saved project), so renderProjDaysEditor bailed and the days appeared nowhere —
+     which is exactly how a second click created a duplicate set. Re-open the card so they show. */
+  if(isNew){ openProject(id); const m2=document.getElementById('pj_genMsg');
+    if(m2){ m2.style.color='var(--good)'; m2.textContent=`✓ נוצרו ${created} ימי עבודה${tentative?' (משוערים)':''}.`; } }
+  else renderProjDaysEditor(id);
   refreshView();
 }
 /* ---- inline project days editor ---- */
@@ -2705,6 +2752,7 @@ function renderProjDaysEditor(projId){
     <input type="number" id="pj_shiftDays" value="" placeholder="±7">
     <span class="faint" style="font-size:13px">ימים</span>
     <button class="btn sm" onclick="shiftProjDays()">הזז</button>
+    <span id="pj_shiftMsg" style="font-size:12px;flex-basis:100%;min-height:14px"></span>
   </div>
   <div class="pde-list">${rows}</div>
   ${addBox}`;
@@ -2747,20 +2795,44 @@ function addProjDayInline(){
   list.push({id:uid(),projectId:projId,date:iso,status:'unissued',tentative:false,createdAt:Date.now()});
   save(LS.workdays,list); renderProjDaysEditor(projId); refreshView();
 }
+/* Moving a day that has already been invoiced or paid drags it into a different VAT period and
+   breaks the per-month invoice grouping. It used to do that silently, with no confirmation, and
+   left the number in the box so a second click applied the shift twice. */
 function shiftProjDays(){
   const projId=_editingProjId; if(!projId) return;
-  const delta=parseInt(document.getElementById('pj_shiftDays').value,10);
+  const inp=document.getElementById('pj_shiftDays');
+  const raw=(inp.value||'').trim();
+  const delta=/^[+-]?\d+$/.test(raw)? parseInt(raw,10) : NaN;
   if(!delta||isNaN(delta)){ alert('הזן מספר ימים להזזה (חיובי = קדימה, שלילי = אחורה).'); return; }
   const list=load(LS.workdays,[]);
-  list.forEach(w=>{
-    if(w.projectId!==projId) return;
-    const d=new Date((w.date||todayISO())+'T00:00:00');
+  const mine=list.filter(w=>w.projectId===projId);
+  if(!mine.length){ alert('אין ימים להזזה בפרויקט הזה.'); return; }
+  const locked=mine.filter(w=>w.status==='paid'||w.status==='issued'||w.status==='overdue');
+  let moveLocked=false;
+  if(locked.length){
+    moveLocked=confirm(
+      `${locked.length} מתוך ${mine.length} הימים כבר הופקה להם חשבונית או שולמו.\n\n`+
+      `אישור = להזיז גם אותם (ישנה את חודש החשבונית ואת דוח המע"מ).\n`+
+      `ביטול = להזיז רק את ${mine.length-locked.length} הימים שטרם הופקו.`);
+    if(!moveLocked && mine.length===locked.length){ alert('אין ימים שטרם הופקו — לא בוצעה הזזה.'); return; }
+  }
+  let moved=0;
+  for(const w of list){
+    if(w.projectId!==projId) continue;
+    const isLocked=(w.status==='paid'||w.status==='issued'||w.status==='overdue');
+    if(isLocked && !moveLocked) continue;
+    const d=new Date((normDate(w.date)||todayISO())+'T00:00:00');
     d.setDate(d.getDate()+delta);
     w.date=d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
-  });
-  save(LS.workdays,list); renderProjDaysEditor(projId); refreshView();
-  const msg=document.getElementById('pj_genMsg');
-  if(msg){ msg.style.color='var(--good)'; msg.textContent=`✓ כל הימים הוזזו ב-${delta>0?'+':''}${delta} ימים.`; }
+    moved++;
+  }
+  save(LS.workdays,list);
+  inp.value='';                       // clear, so a second click can't double-apply
+  renderProjDaysEditor(projId); refreshView();
+  // report right next to the control — pj_genMsg sits below the whole day list, usually off-screen
+  const msg=document.getElementById('pj_shiftMsg');
+  if(msg){ msg.style.color='var(--good)';
+    msg.textContent=`✓ ${moved} ימים הוזזו ב-${delta>0?'+':''}${delta}${locked.length&&!moveLocked?` · ${locked.length} ימים שהופקו נשארו במקומם`:''}.`; }
 }
 /* AI update mode — import updated dates into an existing project */
 let _schedUpdateMode=false, _schedUpdateProjId=null, _schedFilePending=false;
@@ -3022,10 +3094,8 @@ function renderDashboard(){
   // ---- money owed to me, by stage. Work already performed but not yet invoiced counts too. ----
   let unissued=0,issued=0,overdue=0,nUn=0,nIs=0,nOd=0;
   for(const w of workdays){
-    if(w.tentative===true) continue;
-    // a day still ahead — or being shot today — is not owed yet. Same cutoff as needsInvoice().
-    if((normDate(w.date)||'')>=todayStr) continue;
-    const st=w.status||'unissued'; if(st==='paid') continue;
+    if(!isOwed(w)) continue;                    // one shared definition — see isOwed()
+    const st=w.status||'unissued';
     const amt=computePay(w).total;
     if(st==='overdue'){ overdue+=amt; nOd++; }
     else if(st==='issued'){ issued+=amt; nIs++; }
@@ -3745,7 +3815,11 @@ function deleteIncomeEntry(id){ if(!confirm('למחוק את רשומת ההכנ
 
 /* ---------- Modal helpers ---------- */
 function openModal(id){ document.getElementById(id).classList.add('open'); }
-function closeModal(id){ document.getElementById(id).classList.remove('open'); }
+function closeModal(id){
+  document.getElementById(id).classList.remove('open');
+  // if this was the last open modal, apply anything that arrived from another device meanwhile
+  setTimeout(()=>{ try{ flushRemote(); }catch(e){} },0);
+}
 
 /* ---------- Export / Import ---------- */
 function exportData(){
@@ -3792,7 +3866,15 @@ function isEmptyData(d){
   });
 }
 let _suppressBackup=false;
-function applyData(d){ _suppressBackup=true; try{ Object.values(LS).forEach(k=>{ if(d[k]!=null) localStorage.setItem(k, JSON.stringify(d[k])); }); } finally { _suppressBackup=false; } }
+/* Writes localStorage directly (bypassing save()) so a cloud pull doesn't bounce straight back
+   up as a push. But it must still reach the LOCAL backup layers, otherwise a phone-only editing
+   pattern leaves the PC's cine-finance-data.json silently frozen at its last local edit. */
+function applyData(d){
+  _suppressBackup=true;
+  try{ Object.values(LS).forEach(k=>{ if(d[k]!=null) localStorage.setItem(k, JSON.stringify(d[k])); }); }
+  finally { _suppressBackup=false; }
+  scheduleSave();          // file backup + IndexedDB snapshot, no cloud push
+}
 
 /* --- tiny IndexedDB key/value store --- */
 const IDB_NAME='cine_finance', IDB_STORE='kv';
@@ -4003,29 +4085,59 @@ async function onAuthed(){
   renderSyncPill(); renderSyncUI();
 }
 
+/* A pull used to be applied the instant it arrived. Modals live outside `.view`, so refreshView()
+   never touches them: with the work-day form open you would press שמור and write a stale snapshot
+   straight over the other device's change. Settings had its inputs (incl. a half-typed API key)
+   overwritten, and the signer re-rendered its pages mid-placement.
+   So: while the UI is busy, park the payload and tell the user, then apply it on modal close. */
+let _pendingRemote=null;
+function uiBusy(){ return !!document.querySelector('.modal-bg.open'); }
+function applyRemote(data){
+  _lastSyncedJSON=JSON.stringify(data);
+  applyData(data); normalizeAllDates(); refreshView(); setSync('synced');
+}
+function flushRemote(){
+  if(!_pendingRemote || uiBusy()) return;
+  const d=_pendingRemote; _pendingRemote=null;
+  applyRemote(d); renderRemoteBanner();
+}
+function renderRemoteBanner(){
+  let el=document.getElementById('remoteBanner');
+  if(!_pendingRemote){ if(el) el.remove(); return; }
+  if(!el){ el=document.createElement('div'); el.id='remoteBanner'; el.className='remote-banner'; document.body.appendChild(el); }
+  el.innerHTML=`עודכן במכשיר אחר — השינוי ייטען כשתסגור את החלון <button onclick="closeAllModals();flushRemote()">טען עכשיו</button>`;
+}
+function closeAllModals(){ document.querySelectorAll('.modal-bg.open').forEach(m=>m.classList.remove('open')); }
 function setupRealtime(uid){
   teardownRealtime();
   _rtChannel=_sb.channel('app_data_'+uid)
-    .on('postgres_changes', { event:'*', schema:'public', table:'app_data', filter:'user_id=eq.'+uid }, payload=>{
+    .on('postgres_changes', { event:'*', schema:'public', table:'app_data', filter:'user_id=eq.'+uid }, async payload=>{
       const row=payload.new; if(!row || row.data==null) return;
       const incoming=JSON.stringify(row.data);
       if(incoming===_lastSyncedJSON) return;                 // echo of our own push
       if(incoming===JSON.stringify(dumpData())){ _lastSyncedJSON=incoming; return; }
-      _lastSyncedJSON=incoming;
-      applyData(row.data); refreshView();
-      setSync('synced');
+      /* A local edit is still sitting in the debounced push queue. Applying the pull now would
+         overwrite it in localStorage AND set _lastSyncedJSON to the incoming payload, so the
+         queued push would then early-return as "nothing changed" and the edit would vanish with
+         no error. Send ours up first so it at least reaches the cloud. */
+      if(_pushPending){ clearTimeout(_pushTimer); await pushNow(false); }
+      if(uiBusy()){ _pendingRemote=row.data; renderRemoteBanner(); setSync('synced'); return; }
+      applyRemote(row.data);
     })
     .subscribe();
 }
 function teardownRealtime(){ if(_rtChannel){ try{ _sb.removeChannel(_rtChannel); }catch(e){} _rtChannel=null; } }
 
+let _pushPending=false;
 function scheduleCloudPush(){
   if(!_session) return;
+  _pushPending=true;
   clearTimeout(_pushTimer);
   _pushTimer=setTimeout(()=>pushNow(false), 1000);
 }
 async function pushNow(isMigration){
-  if(!_session) return;
+  if(!_session){ _pushPending=false; return; }
+  _pushPending=false;
   try{
     const dump=dumpData(); const json=JSON.stringify(dump);
     if(!isMigration && json===_lastSyncedJSON) return;       // nothing actually changed
