@@ -28,3 +28,9 @@ cine-finance-backup-*.json
 # Private project notes + local dev tooling — kept local, NOT published to the public repo
 CLAUDE.md
 .claude/
+PRODUCT.md
+DESIGN.md
+.impeccable/
+
+# private scanned mail data — never publish (public Pages repo)
+cine-finance-mailscan-*.json

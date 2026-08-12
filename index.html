@@ -259,6 +259,47 @@ label.fld input:focus,label.fld select:focus,label.fld textarea:focus{
 .finnote{color:var(--muted);font-size:12px;line-height:1.6;margin:10px 0}
 .fin-sub-h{margin:16px 0 2px;font-size:12px;font-weight:600;color:var(--muted)}
 /* expenses list */
+/* ---------- Mail docs (receipts scanned out of Gmail) ---------- */
+.md-strip{display:grid;grid-template-columns:repeat(auto-fill,minmax(124px,1fr));gap:10px}
+.md-card{text-align:start;padding:12px 13px;border:1px solid var(--line);border-radius:12px;background:transparent;cursor:pointer;transition:border-color var(--t-fast) var(--ease-out),background var(--t-fast) var(--ease-out)}
+.md-card:hover{border-color:var(--accent)}
+.md-card.on{border-color:var(--accent);background:color-mix(in srgb,var(--accent) 9%,transparent)}
+.md-c-m{font-size:12px;opacity:.65;margin-bottom:5px}
+.md-c-s{font-size:17px;font-weight:600}
+.md-c-v{font-size:11px;opacity:.55;margin-top:2px}
+.md-c-w{font-size:11px;margin-top:7px;color:var(--accent)}
+.md-c-w.done{opacity:.4;color:inherit}
+.md-note{margin:12px 0 18px;padding:11px 13px;border-radius:10px;font-size:12.5px;line-height:1.6;
+  border:1px solid color-mix(in srgb,#e0b15e 45%,transparent);background:color-mix(in srgb,#e0b15e 10%,transparent)}
+.md-group{margin-top:24px}
+.md-ghead{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:6px}
+.md-ghead h4{margin:0;font-size:14px;font-weight:600;opacity:.8}
+.md-row{display:flex;align-items:flex-start;gap:12px;padding:12px 0;border-top:1px solid var(--line)}
+.md-row.b-needs{border-inline-start:2px solid #e0b15e;padding-inline-start:10px}
+.md-row.b-approved{opacity:.62}
+.md-row.b-ignored{opacity:.42}
+.md-day{min-width:26px;text-align:center;font-size:15px;opacity:.7;padding-top:1px}
+.md-main{flex:1;min-width:0}
+.md-v{font-size:14px;font-weight:500}
+.md-sub{font-size:11.5px}
+.md-tag{display:inline-block;margin-inline-start:7px;padding:1px 6px;border-radius:5px;font-size:10.5px;font-weight:400;border:1px solid var(--line);opacity:.75}
+.md-tag.warn{border-color:color-mix(in srgb,#e0b15e 55%,transparent);color:#e0b15e}
+.md-meta{display:flex;align-items:center;gap:10px;margin-top:6px;flex-wrap:wrap}
+.md-meta select{font:inherit;font-size:11.5px;padding:3px 6px;border-radius:7px;border:1px solid var(--line);background:transparent;color:inherit}
+.md-meta a{font-size:11.5px;color:var(--accent);text-decoration:none}
+.md-amt{text-align:start;white-space:nowrap}
+.md-amt .num{font-weight:600}
+.md-amt .faint{font-size:11px}
+.md-fill{display:flex;align-items:center;gap:6px;flex-wrap:wrap;max-width:290px}
+.md-fill input{width:96px;font:inherit;font-size:13px;padding:5px 8px;border-radius:8px;border:1px solid var(--line);background:transparent;color:inherit}
+.md-fx{flex-basis:100%;font-size:11px;color:#e0b15e}
+.md-act{display:flex;flex-direction:column;gap:5px;align-items:stretch}
+@media(max-width:760px){
+  .md-row{flex-wrap:wrap}
+  .md-main{flex-basis:calc(100% - 40px)}
+  .md-fill,.md-amt,.md-act{margin-inline-start:38px}
+  .md-act{flex-direction:row}
+}
 .exp-row{display:flex;align-items:center;gap:12px;padding:11px 0;border-top:1px solid var(--line);cursor:pointer;transition:opacity var(--t-fast) var(--ease-out)}
 .exp-row:first-child{border-top:0}
 .exp-row:hover{opacity:.75}
@@ -742,6 +783,7 @@ td[title="לחץ לשינוי סטטוס"]:hover .st{border-color:var(--accent-d
       <button data-view="contracts" class="nav-more"><span class="ic">❒</span>חוזים</button>
       <button data-view="sign" class="nav-more"><span class="ic">✍</span>חתימה</button>
       <button data-view="expenses" class="nav-more"><span class="ic">↧</span>הוצאות</button>
+      <button data-view="maildocs" class="nav-more"><span class="ic">✉</span>מהמייל</button>
       <button data-view="settings" class="nav-more"><span class="ic">⚙</span>הגדרות</button>
       <button class="nav-moretoggle" onclick="openMoreSheet()"><span class="ic">⋯</span>עוד</button>
     </nav>
@@ -815,6 +857,12 @@ td[title="לחץ לשינוי סטטוס"]:hover .st{border-color:var(--accent-d
       <!-- EXPENSES -->
       <section class="view" id="view-expenses">
         <div id="expRoot"></div>
+      </section>
+
+      <!-- MAIL DOCS (receipts scanned out of Gmail) -->
+      <section class="view" id="view-maildocs">
+        <input type="file" id="mdScanFile" accept="application/json,.json" style="display:none" onchange="onMdScanFile(this)">
+        <div id="mdRoot"></div>
       </section>
 
       <!-- SETTINGS -->
@@ -895,6 +943,7 @@ td[title="לחץ לשינוי סטטוס"]:hover .st{border-color:var(--accent-d
     <button class="sheet-item" onclick="moreGo('contracts')"><span class="ic">❒</span><span>חוזים</span></button>
     <button class="sheet-item" onclick="moreGo('sign')"><span class="ic">✍</span><span>חתימה על חוזה</span></button>
     <button class="sheet-item" onclick="moreGo('expenses')"><span class="ic">↧</span><span>הוצאות</span></button>
+    <button class="sheet-item" onclick="moreGo('maildocs')"><span class="ic">✉</span><span>קבלות מהמייל</span></button>
     <button class="sheet-item" onclick="moreGo('settings')"><span class="ic">⚙</span><span>הגדרות</span></button>
   </div>
 </div>
@@ -1061,7 +1110,8 @@ const API_URL = 'https://api.anthropic.com/v1/messages';
 const LS = {
   settings:'cf_settings', contracts:'cf_contracts',
   workdays:'cf_workdays', expenses:'cf_expenses', projects:'cf_projects', signer:'cf_signer',
-  income:'cf_income'   // historical monthly income summaries (e.g. imported from Morning)
+  income:'cf_income',  // historical monthly income summaries (e.g. imported from Morning)
+  maildocs:'cf_maildocs' // documents scanned out of Gmail, staged before they become expenses
 };
 const PROJECT_COLORS=['#5f9ce8','#5fc88f','#e0b15e','#c98fe8','#e8685f','#5fd0e8','#e88f5f','#9fe85f','#8f9ce8','#e85fb0'];
 const MONTH_NAMES=['ינואר','פברואר','מרץ','אפריל','מאי','יוני','יולי','אוגוסט','ספטמבר','אוקטובר','נובמבר','דצמבר'];
@@ -1285,7 +1335,7 @@ function esc(s){ return String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;'
 function fmtMoney(n){ const s=settings(); return (Number(n)||0).toLocaleString('he-IL')+' '+s.currency; }
 
 /* ---------- navigation ---------- */
-const TITLES={dashboard:'דשבורד',contracts:'חוזים',sign:'חתימה על חוזים',workdays:'ימי עבודה',calendar:'לוח שנה',finance:'פירוט פיננסי',expenses:'הוצאות',settings:'הגדרות'};
+const TITLES={dashboard:'דשבורד',contracts:'חוזים',sign:'חתימה על חוזים',workdays:'ימי עבודה',calendar:'לוח שנה',finance:'פירוט פיננסי',expenses:'הוצאות',maildocs:'קבלות מהמייל',settings:'הגדרות'};
 let _currentView='dashboard';
 function go(v){
   _currentView=v;
@@ -1293,7 +1343,7 @@ function go(v){
   document.getElementById('view-'+v).classList.add('active');
   document.querySelectorAll('#nav button').forEach(b=>b.classList.toggle('active', b.dataset.view===v));
   const moreT=document.querySelector('.nav-moretoggle');
-  if(moreT) moreT.classList.toggle('active', ['contracts','sign','expenses','settings'].includes(v));  // light up "More" for secondary views
+  if(moreT) moreT.classList.toggle('active', ['contracts','sign','expenses','maildocs','settings'].includes(v));  // light up "More" for secondary views
   document.getElementById('pageTitle').textContent=TITLES[v];
   renderTopActions(v);
   if(v==='dashboard') renderDashboard();
@@ -1302,6 +1352,7 @@ function go(v){
   if(v==='calendar') renderCalendar();
   if(v==='finance') renderFinance();
   if(v==='expenses') renderExpenses();
+  if(v==='maildocs') renderMailDocs();
   if(v==='sign') renderSigner();
   if(v==='settings') fillSettings();
 }
@@ -3798,6 +3849,280 @@ function saveExpense(){
   refreshView();
 }
 function deleteExpenseFromModal(){ if(_editingExpId) deleteExpense(_editingExpId); }
+
+
+/* ---- MAIL DOCS — receipts scanned out of Gmail -------------------------------------------
+   A document warehouse that deliberately sits OUTSIDE the money. A scanned row affects VAT,
+   income tax and Bituach Leumi only once it has been approved and written into cf_expenses.
+   Two reasons that separation matters:
+     1. the Gmail connector cannot read PDF attachments, so a large minority of Israeli
+        invoices arrive with everything known EXCEPT the amount. Those must never be guessed
+        and must never silently count as zero inside a total.
+     2. a re-scan can then be run at any time — msgId is the dedup key and an already-approved
+        row is never rewritten.
+   confidence: 'high' (amount read from the mail) | 'needs-amount' (amount lives in a PDF)
+               | 'guess' (category or business/personal call was inferred, not stated). */
+function getMailDocs(){ return load(LS.maildocs,[]); }
+function setMailDocs(l){ save(LS.maildocs,l); }
+let _mdBand='todo', _mdMonth='all';
+
+/* the scan speaks a 'none' VAT mode for foreign/tax-free documents; the expense engine calls
+   that same thing 'exempt'. Translate at the boundary rather than teaching one to the other. */
+function mdVatMode(d){ return (d.vatMode==='none'||d.vatMode==='exempt') ? 'exempt' : 'included'; }
+function mdReady(d){ return d.business!==false && d.amount!=null && +d.amount>0 && (d.currency||'ILS')==='ILS'; }
+function mdMonthsWithDocs(){ return [...new Set(getMailDocs().map(d=>monthKey(d.date)).filter(Boolean))].sort(); }
+
+function importMailDocs(rows){
+  const list=getMailDocs(), byMsg=new Map(list.map(d=>[d.msgId,d]));
+  let added=0, updated=0, skipped=0;
+  for(const r of rows||[]){
+    if(!r||!r.msgId) continue;
+    const cur=byMsg.get(r.msgId);
+    if(cur){
+      // an approved row already became money; leave it exactly as the owner approved it
+      if(cur.status==='approved'){ skipped++; continue; }
+      // a hand-typed amount outranks a re-scan that still doesn't know the number
+      const prevAmount=cur.amount, prevCur=cur.currency, prevConf=cur.confidence;
+      Object.assign(cur, r, {id:cur.id, status:cur.status, linkedId:cur.linkedId});
+      if(prevAmount!=null && r.amount==null){ cur.amount=prevAmount; cur.currency=prevCur; cur.confidence=prevConf; }
+      updated++;
+    } else {
+      list.push(Object.assign({id:uid(), status:'pending', linkedId:null, addedAt:Date.now()}, r));
+      added++;
+    }
+  }
+  setMailDocs(list);
+  return {added, updated, skipped};
+}
+
+function mdApprove(id, silent){
+  const list=getMailDocs(), d=list.find(x=>x.id===id);
+  if(!d || d.status==='approved') return false;
+  if(!mdReady(d)){
+    if(!silent) alert(d.amount==null?'אין סכום למסמך הזה — יש להזין אותו קודם.'
+                     :(d.currency||'ILS')!=='ILS'?'המסמך במטבע חוץ — יש להזין כמה חויב בפועל בשקלים.'
+                     :'המסמך מסומן כלא-עסקי, ולכן אינו נכנס להוצאות.');
+    return false;
+  }
+  const ex={ id:uid(), createdAt:Date.now(), date:normDate(d.date), amount:+d.amount,
+             category:d.category||'other', vatMode:mdVatMode(d), vendor:d.vendor||'',
+             note:[d.docType,d.docNo].filter(Boolean).join(' ') || 'מהמייל',
+             source:'gmail', msgId:d.msgId };
+  const xs=getExpenses(); xs.push(ex); setExpenses(xs);
+  d.status='approved'; d.linkedId=ex.id; setMailDocs(list);
+  return true;
+}
+function mdUnapprove(id){
+  const list=getMailDocs(), d=list.find(x=>x.id===id); if(!d) return;
+  if(d.linkedId){ const xs=getExpenses().filter(x=>x.id!==d.linkedId); setExpenses(xs); }
+  d.status='pending'; d.linkedId=null; setMailDocs(list); renderMailDocs();
+}
+function mdIgnore(id){
+  const list=getMailDocs(), d=list.find(x=>x.id===id); if(!d) return;
+  if(d.status==='approved') mdUnapprove(id);
+  const l2=getMailDocs(), d2=l2.find(x=>x.id===id);
+  d2.status='ignored'; setMailDocs(l2); renderMailDocs();
+}
+function mdRestore(id){
+  const list=getMailDocs(), d=list.find(x=>x.id===id); if(!d) return;
+  d.status='pending'; setMailDocs(list); renderMailDocs();
+}
+function mdSetAmount(id, raw){
+  const v=String(raw==null?'':raw).trim(); if(v==='') return;
+  const n=+v; if(!isFinite(n)||n<=0){ alert('סכום לא תקין.'); return; }
+  const list=getMailDocs(), d=list.find(x=>x.id===id); if(!d) return;
+  if((d.currency||'ILS')!=='ILS'){            // foreign doc: the owner types the actual ILS charge
+    d.origAmount=d.amount; d.origCurrency=d.currency; d.currency='ILS';
+  }
+  d.amount=n;
+  if(d.confidence==='needs-amount') d.confidence='high';
+  setMailDocs(list); renderMailDocs();
+}
+function mdSetCategory(id, cat){
+  const list=getMailDocs(), d=list.find(x=>x.id===id); if(!d) return;
+  d.category=cat; setMailDocs(list);
+  if(d.status==='approved' && d.linkedId){    // keep an already-written expense in step
+    const xs=getExpenses(), e=xs.find(x=>x.id===d.linkedId);
+    if(e){ e.category=cat; setExpenses(xs); }
+  }
+  renderMailDocs();
+}
+function mdToggleBusiness(id){
+  const list=getMailDocs(), d=list.find(x=>x.id===id); if(!d) return;
+  if(d.status==='approved') mdUnapprove(id);
+  const l2=getMailDocs(), d2=l2.find(x=>x.id===id);
+  d2.business = d2.business===false; setMailDocs(l2); renderMailDocs();
+}
+/* recurring bills (lease, phone, electricity) are near-identical month to month, so one read
+   seeds the rest — offered as a prefill the owner confirms, never applied on its own.
+   Matched on vendor AND document type, not just the sender domain: one domain can carry two
+   unrelated series (Pango bills a monthly summary and individual car-park transactions), and
+   prefilling one from the other would quietly invent a wrong number. */
+function mdLastAmountFor(d){
+  const prev=getMailDocs()
+    .filter(x=>x.id!==d.id && x.amount!=null && (x.currency||'ILS')==='ILS'
+             && x.vendor===d.vendor && (x.docType||'')===(d.docType||''))
+    .sort((a,b)=>(normDate(b.date)||'').localeCompare(normDate(a.date)||''));
+  return prev.length?prev[0].amount:null;
+}
+function mdApproveMonth(ym){
+  const targets=getMailDocs().filter(d=>monthKey(d.date)===ym && d.status==='pending' && mdReady(d));
+  if(!targets.length){ alert('אין בחודש הזה שורות מוכנות לאישור.'); return; }
+  if(!confirm(`לאשר ${targets.length} מסמכים של ${ym}? הם ייכנסו להוצאות ויתחילו להשפיע על המע"מ והמס.`)) return;
+  let n=0; targets.forEach(d=>{ if(mdApprove(d.id,true)) n++; });
+  renderMailDocs();
+  alert(`אושרו ${n} מסמכים.`);
+}
+function mdSetBand(b){ _mdBand=b; renderMailDocs(); }
+function mdSetMonth(m){ _mdMonth=m; renderMailDocs(); }
+/* The scan itself is NOT shipped in this file. index.html is published to a public GitHub
+   Pages repo, and a scan carries supplier names, document numbers, utility account numbers
+   and amounts — private financial data that has no business being in a public repo. It is
+   loaded from a local JSON file instead, and from then on lives in localStorage + the
+   owner's private Supabase row like every other piece of app data. */
+function mdLoadScan(){ document.getElementById('mdScanFile').click(); }
+function onMdScanFile(input){
+  const file=input.files&&input.files[0]; input.value='';
+  if(!file) return;
+  const fr=new FileReader();
+  fr.onload=()=>{
+    let rows;
+    try{ rows=JSON.parse(fr.result); }catch(e){ alert('הקובץ אינו JSON תקין.'); return; }
+    if(!Array.isArray(rows)){ alert('הקובץ אמור להכיל מערך של מסמכים.'); return; }
+    if(!rows.every(r=>r&&r.msgId)){ alert('חסר msgId באחד המסמכים — בלעדיו אי אפשר למנוע כפילויות.'); return; }
+    const r=importMailDocs(rows);
+    renderMailDocs();
+    alert(`נטענו ${r.added} מסמכים חדשים · ${r.updated} עודכנו · ${r.skipped} כבר מאושרים ולא נגעתי בהם.`);
+  };
+  fr.readAsText(file);
+}
+
+function renderMailDocs(){
+  const root=document.getElementById('mdRoot'); if(!root) return;
+  const all=getMailDocs();
+  const f=n=>fmtMoney(Math.round(n));
+
+  if(!all.length){
+    root.innerHTML=`<div class="card" style="max-width:620px">
+      <h3 style="margin:0 0 6px;font-weight:500">קבלות מהמייל</h3>
+      <p class="muted" style="margin:0 0 16px;font-size:13.5px;line-height:1.7">כאן יושבים כל המסמכים שחולצו מהג'ימייל — ספק, תאריך, מספר מסמך וסכום. שום דבר לא נכנס להוצאות ולא משפיע על המע"מ והמס עד שאתה מאשר אותו.</p>
+      <button class="btn primary" onclick="mdLoadScan()">טען את סריקת 2026</button>
+    </div>`;
+    return;
+  }
+
+  const months=mdMonthsWithDocs();
+  /* A row marked non-business can never be approved, so it must not sit in "ממתין לאישור"
+     inflating the count of work left to do — it gets its own band with a way back. */
+  const bandOf=d=> d.status==='approved'?'approved' : d.status==='ignored'?'ignored'
+                 : d.business===false?'personal'
+                 : (d.amount==null||(d.currency||'ILS')!=='ILS')?'needs' : 'ready';
+  const counts={needs:0,ready:0,approved:0,ignored:0,personal:0};
+  all.forEach(d=>counts[bandOf(d)]++);
+
+  // month strip — approved money only, so a card never implies a number we do not have
+  const cards=months.map(ym=>{
+    const inM=all.filter(d=>monthKey(d.date)===ym);
+    const appr=inM.filter(d=>d.status==='approved');
+    let sum=0, vat=0;
+    appr.forEach(d=>{ const c=computeExpense({amount:d.amount,vatMode:mdVatMode(d),category:d.category}); sum+=c.amount; vat+=c.vatCredit; });
+    const waiting=inM.filter(d=>d.status!=='approved'&&d.status!=='ignored').length;
+    const mi=+ym.slice(5,7)-1;
+    return `<button class="md-card ${_mdMonth===ym?'on':''}" onclick="mdSetMonth('${_mdMonth===ym?'all':ym}')">
+      <div class="md-c-m">${MONTH_NAMES[mi]}</div>
+      <div class="md-c-s num">${f(sum)}</div>
+      <div class="md-c-v">מע"מ ${f(vat)}</div>
+      ${waiting?`<div class="md-c-w">${waiting} ממתינים</div>`:`<div class="md-c-w done">הכל טופל</div>`}
+    </button>`;
+  }).join('');
+
+  const bands=[['todo','לטיפול',counts.needs+counts.ready],['needs','דורש סכום',counts.needs],
+               ['ready','ממתין לאישור',counts.ready],['approved','אושר',counts.approved],
+               ['personal','פרטי',counts.personal],['ignored','הוסתר',counts.ignored],
+               ['all','הכל',all.length]];
+  const chips=bands.map(([k,l,n])=>`<button class="chip ${_mdBand===k?'on':''}" onclick="mdSetBand('${k}')">${l}${n?` <span class="faint">${n}</span>`:''}</button>`).join('');
+
+  let list=all.slice();
+  if(_mdMonth!=='all') list=list.filter(d=>monthKey(d.date)===_mdMonth);
+  if(_mdBand==='todo') list=list.filter(d=>bandOf(d)==='needs'||bandOf(d)==='ready');
+  else if(_mdBand!=='all') list=list.filter(d=>bandOf(d)===_mdBand);
+  list.sort((a,b)=>(normDate(b.date)||'').localeCompare(normDate(a.date)||'') || String(a.vendor).localeCompare(String(b.vendor),'he'));
+
+  // group by month, then vendor, so recurring bills line up and gaps are obvious
+  const groups={};
+  list.forEach(d=>{ const k=monthKey(d.date)||'ללא תאריך'; (groups[k]=groups[k]||[]).push(d); });
+
+  const catOpts=d=>EXPENSE_CATS.map(([k,l])=>`<option value="${k}" ${(d.category||'other')===k?'selected':''}>${esc(l)}</option>`).join('');
+
+  const body=Object.keys(groups).sort().reverse().map(ym=>{
+    const mi=+ym.slice(5,7)-1, yy=ym.slice(0,4);
+    const rows=groups[ym].map(d=>{
+      const band=bandOf(d);
+      const c=(d.amount!=null&&(d.currency||'ILS')==='ILS')
+        ? computeExpense({amount:d.amount,vatMode:mdVatMode(d),category:d.category}) : null;
+      const day=normDate(d.date)?new Date(normDate(d.date)+'T00:00:00').getDate():'—';
+      const gmail=`https://mail.google.com/mail/u/0/#all/${esc(d.msgId)}`;
+
+      let right;
+      if(band==='needs'){
+        const last=mdLastAmountFor(d);
+        const fx=(d.currency&&d.currency!=='ILS'&&d.amount!=null)
+          ? `<span class="md-fx">${esc(d.currency)} ${esc(d.amount)} — כמה חויב בשקלים?</span>` : '';
+        right=`<div class="md-fill">${fx}
+          <input type="number" step="0.01" placeholder="סכום ₪" id="mdA_${d.id}"
+                 onkeydown="if(event.key==='Enter')mdSetAmount('${d.id}',this.value)">
+          <button class="btn sm" onclick="mdSetAmount('${d.id}',document.getElementById('mdA_${d.id}').value)">שמור</button>
+          ${last!=null?`<button class="btn sm ghost" title="כמו החיוב הקודם של אותו ספק" onclick="mdSetAmount('${d.id}',${last})">כמו קודם · ${f(last)}</button>`:''}
+        </div>`;
+      } else {
+        right=`<div class="md-amt">
+          <div class="num">${f(d.amount)}</div>
+          ${c?`<div class="faint">מוכר ${f(c.deductible)}${c.vatCredit>0?' · מע"מ '+f(c.vatCredit):''}</div>`:''}
+        </div>`;
+      }
+
+      const actions = band==='approved'
+        ? `<button class="btn sm ghost" onclick="mdUnapprove('${d.id}')">בטל אישור</button>`
+        : band==='ignored'
+        ? `<button class="btn sm ghost" onclick="mdRestore('${d.id}')">החזר</button>`
+        : band==='personal'
+        ? `<button class="btn sm ghost" onclick="mdToggleBusiness('${d.id}')" title="סמן כהוצאה עסקית">זו כן הוצאה עסקית</button>`
+        : `${band==='ready'?`<button class="btn sm primary" onclick="mdApprove('${d.id}');renderMailDocs()">אשר</button>`:''}
+           <button class="btn sm ghost" onclick="mdToggleBusiness('${d.id}')" title="הוצאה פרטית — לא נכנסת למס">פרטי</button>
+           <button class="btn sm ghost" onclick="mdIgnore('${d.id}')" title="הסתר מהרשימה">הסתר</button>`;
+
+      return `<div class="md-row b-${band}">
+        <div class="md-day"><b>${day}</b></div>
+        <div class="md-main">
+          <div class="md-v">${esc(d.vendor||'—')}${d.business===false?'<span class="md-tag">פרטי</span>':''}${d.confidence==='guess'?'<span class="md-tag warn">הערכה</span>':''}</div>
+          <div class="faint md-sub">${esc([d.docType,d.docNo].filter(Boolean).join(' '))}${d.note?' · '+esc(d.note):''}</div>
+          <div class="md-meta">
+            <select onchange="mdSetCategory('${d.id}',this.value)">${catOpts(d)}</select>
+            <a href="${gmail}" target="_blank" rel="noopener">פתח במייל ↗</a>
+          </div>
+        </div>
+        ${right}
+        <div class="md-act">${actions}</div>
+      </div>`;
+    }).join('');
+
+    const readyN=groups[ym].filter(d=>bandOf(d)==='ready').length;
+    return `<div class="md-group">
+      <div class="md-ghead">
+        <h4>${MONTH_NAMES[mi]} ${yy}</h4>
+        ${readyN?`<button class="btn sm" onclick="mdApproveMonth('${ym}')">אשר את כל ה‑${readyN} המוכנים</button>`:''}
+      </div>
+      ${rows}
+    </div>`;
+  }).join('');
+
+  root.innerHTML=`
+    <div class="md-strip">${cards}</div>
+    <div class="chips" style="margin:16px 0 4px">${chips}</div>
+    ${counts.needs?`<div class="md-note">${counts.needs} מסמכים ידועים אבל בלי סכום — הסכום שלהם קיים רק בתוך ה‑PDF המצורף. הם <b>לא</b> נספרים באף סכום כאן עד שיוזן להם מספר.</div>`:''}
+    ${body||'<div class="muted" style="padding:24px 4px">אין מסמכים בסינון הזה.</div>'}
+    <div style="margin:22px 0 8px"><button class="btn sm ghost" onclick="mdLoadScan()">טען/רענן סריקה</button></div>`;
+}
 function deleteExpense(id){
   if(!confirm('למחוק את ההוצאה?')) return;
   setExpenses(getExpenses().filter(e=>e.id!==id));
