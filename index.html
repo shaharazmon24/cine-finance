@@ -3710,6 +3710,7 @@ function renderFinance(){
 let _expRef=new Date(), _expCat='all';
 function expMove(d){ _expRef=new Date(_expRef.getFullYear(), _expRef.getMonth()+d, 1); renderExpenses(); }
 function expToday(){ _expRef=new Date(); renderExpenses(); }
+function expGoMonth(i){ _expRef=new Date(_expRef.getFullYear(), i, 1); renderExpenses(); }
 function setExpCat(k){ _expCat=k; renderExpenses(); }
 function renderExpenses(){
   const root=document.getElementById('expRoot'); if(!root) return;
@@ -3742,7 +3743,27 @@ function renderExpenses(){
   }).join('');
 
   const saved = m.deductible*proj.effRate + m.vatCredit;
+
+  /* Year strip. This page shows one month at a time, which quietly hid a year's worth of
+     imported receipts: approve 32 documents across 2026, land on the current month, see four,
+     and conclude nothing saved. Every month that holds an expense is now visible and one click
+     away, and the month in view is marked. */
+  const monthCounts=new Array(12).fill(0), monthSums=new Array(12).fill(0);
+  getExpenses().forEach(e=>{ const k=monthKey(e.date); if(!k||k.slice(0,4)!==String(y)) return;
+    const i=+k.slice(5,7)-1; monthCounts[i]++; monthSums[i]+=computeExpense(e).amount; });
+  const anyOtherMonth=monthCounts.some((c,i)=>c>0&&i!==mo);
+  const yearStrip = monthCounts.some(c=>c>0) ? `
+    <div class="md-strip" style="margin-bottom:16px">
+      ${monthCounts.map((c,i)=>c===0&&i!==mo?'':`
+        <button class="md-card ${i===mo?'on':''}" onclick="expGoMonth(${i})">
+          <div class="md-c-m">${MONTH_NAMES[i]}</div>
+          <div class="md-c-s num">${f(monthSums[i])}</div>
+          <div class="md-c-w ${c?'':'done'}">${c?c+(c===1?' הוצאה':' הוצאות'):'ריק'}</div>
+        </button>`).join('')}
+    </div>` : '';
+
   root.innerHTML=`
+    ${yearStrip}
     <div class="fin-head">
       <div class="cal-nav">
         <button onclick="expMove(-1)" title="החודש הקודם">›</button>
@@ -3971,7 +3992,8 @@ function mdApproveMonth(ym){
   if(!confirm(`לאשר ${targets.length} מסמכים של ${ym}? הם ייכנסו להוצאות ויתחילו להשפיע על המע"מ והמס.`)) return;
   let n=0; targets.forEach(d=>{ if(mdApprove(d.id,true)) n++; });
   renderMailDocs();
-  alert(`אושרו ${n} מסמכים.`);
+  const mi=+ym.slice(5,7)-1;
+  alert(`אושרו ${n} מסמכים.\n\nהם נכנסו להוצאות בחודש ${MONTH_NAMES[mi]} — דף ההוצאות פותח תמיד בחודש הנוכחי, אז בחר את ${MONTH_NAMES[mi]} ברצועת החודשים למעלה כדי לראות אותם.`);
 }
 function mdSetBand(b){ _mdBand=b; renderMailDocs(); }
 function mdSetMonth(m){ _mdMonth=m; renderMailDocs(); }
@@ -4943,7 +4965,7 @@ async function exportSignedPDF(){
 document.getElementById('signFile').addEventListener('change', e=>{ const f=e.target.files[0]; if(f) signLoadFile(f); e.target.value=''; });
 
 /* ---------- version + auto-update (keeps the installed PWA in sync with the site) ---------- */
-const APP_VERSION='2026.08.12.2';
+const APP_VERSION='2026.08.12.3';
 function setVersionLabels(){
   const a=document.getElementById('appVer'); if(a) a.textContent=APP_VERSION;
   const b=document.getElementById('appVerSettings'); if(b) b.textContent=APP_VERSION;
