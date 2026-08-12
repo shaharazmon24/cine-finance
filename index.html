@@ -3980,7 +3980,27 @@ function mdSetMonth(m){ _mdMonth=m; renderMailDocs(); }
    and amounts — private financial data that has no business being in a public repo. It is
    loaded from a local JSON file instead, and from then on lives in localStorage + the
    owner's private Supabase row like every other piece of app data. */
-function mdLoadScan(){ document.getElementById('mdScanFile').click(); }
+const MD_SCAN_FILE='cine-finance-mailscan-2026.json';
+/* On the PC the scan file sits next to index.html and is served by server.js, so just fetch it —
+   no file picker, no hunting through folders. It is gitignored, so on the public Pages origin the
+   fetch 404s and we fall back to the picker. Privacy and convenience both hold. */
+async function mdLoadScan(){
+  const local=/^(localhost|127\.0\.0\.1|\[::1\])$/.test(location.hostname);
+  if(local){
+    try{
+      const res=await fetch('./'+MD_SCAN_FILE+'?t='+Date.now());
+      if(res.ok){
+        const rows=await res.json();
+        if(Array.isArray(rows) && rows.every(r=>r&&r.msgId)){
+          const r=importMailDocs(rows); renderMailDocs();
+          alert(`נטענו ${r.added} מסמכים חדשים · ${r.updated} עודכנו · ${r.skipped} כבר מאושרים ולא נגעתי בהם.`);
+          return;
+        }
+      }
+    }catch(e){ /* fall through to the picker */ }
+  }
+  document.getElementById('mdScanFile').click();
+}
 function onMdScanFile(input){
   const file=input.files&&input.files[0]; input.value='';
   if(!file) return;
@@ -4006,8 +4026,8 @@ function renderMailDocs(){
     root.innerHTML=`<div class="card" style="max-width:620px">
       <h3 style="margin:0 0 6px;font-weight:500">קבלות מהמייל</h3>
       <p class="muted" style="margin:0 0 16px;font-size:13.5px;line-height:1.7">כאן יושבים כל המסמכים שחולצו מהג'ימייל — ספק, תאריך, מספר מסמך וסכום. שום דבר לא נכנס להוצאות ולא משפיע על המע"מ והמס עד שאתה מאשר אותו.</p>
-      <button class="btn primary" onclick="mdLoadScan()">טען קובץ סריקה</button>
-      <p class="faint" style="margin:12px 0 0;font-size:12px;line-height:1.6">בחר את <b>cine-finance-mailscan-2026.json</b>. הקובץ נשמר אצלך בלבד ואינו נדחף לריפו הציבורי; מרגע הטעינה המסמכים חיים בנתוני האפליקציה ומסתנכרנים כרגיל.</p>
+      <button class="btn primary" onclick="mdLoadScan()">טען את סריקת 2026</button>
+      <p class="faint" style="margin:12px 0 0;font-size:12px;line-height:1.6">במחשב זה נטען לבד מהקובץ שליד האפליקציה. בטלפון — הסנכרון בענן יביא את המסמכים אחרי שתטען כאן פעם אחת.</p>
     </div>`;
     return;
   }
@@ -4923,7 +4943,7 @@ async function exportSignedPDF(){
 document.getElementById('signFile').addEventListener('change', e=>{ const f=e.target.files[0]; if(f) signLoadFile(f); e.target.value=''; });
 
 /* ---------- version + auto-update (keeps the installed PWA in sync with the site) ---------- */
-const APP_VERSION='2026.08.12.1';
+const APP_VERSION='2026.08.12.2';
 function setVersionLabels(){
   const a=document.getElementById('appVer'); if(a) a.textContent=APP_VERSION;
   const b=document.getElementById('appVerSettings'); if(b) b.textContent=APP_VERSION;
