@@ -1233,16 +1233,25 @@ function annualProjection(y){
     // built on it) sawtoothed by ~8 points overnight with no change in the data.
     const dim=new Date(y, now.getMonth()+1, 0).getDate();
     const monthsElapsed = (y===curY)? (now.getMonth() + now.getDate()/dim) : 0;
-    let earned=0, planned=0;
+    let earned=0, plannedAll=0, plannedBooked=0;
     const byM=incomeByMonth(y);                      // work days + historical, de-duplicated
     for(const w of load(LS.workdays,[])){
       if(!(w.date||'').startsWith(y+'-')) continue;
       const sub=computePay(w).sub, d=normDate(w.date);
-      if(d>today) planned+=sub;                      // tentative or not, future work is "planned"
+      if(d>today){
+        plannedAll+=sub;                             // every future day feeds the "what's left" floor
+        /* ...but only CONFIRMED future days may be subtracted from `earned`. incomeByMonth
+           excludes tentative days entirely, so subtracting them here removed money that was
+           never added — deflating the run-rate, the projection and therefore effRate, which
+           drives every set-aside figure in the app. Under-provisioning tax is the dangerous
+           direction, and an imported callsheet defaults every day to tentative. */
+        if(w.tentative!==true) plannedBooked+=sub;
+      }
     }
     // earned = everything already booked this year, minus the part still in the future
     for(const k in byM) earned+=byM[k];
-    earned=Math.max(0, earned-planned);
+    earned=Math.max(0, earned-plannedBooked);
+    const planned=plannedAll;
     // too early in the year to extrapolate from a handful of days — lean on prior years
     const runMonthly = monthsElapsed>=0.5 ? earned/monthsElapsed : 0;
     const priorMonthly = priorAvg/12;
@@ -1334,7 +1343,11 @@ function bituachMonthly(income){
 }
 function uid(){ return Date.now().toString(36)+Math.random().toString(36).slice(2,7); }
 function esc(s){ return String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
-function fmtMoney(n){ const s=settings(); return (Number(n)||0).toLocaleString('he-IL')+' '+s.currency; }
+/* NaN must not be dressed up as "0 ₪" — a broken figure that reads as a real zero is worse
+   than one that announces itself, because nobody goes looking for it. */
+function fmtMoney(n){ const s=settings(); const v=Number(n);
+  if(!isFinite(v)) return '— '+s.currency;
+  return v.toLocaleString('he-IL')+' '+s.currency; }
 
 /* ---------- navigation ---------- */
 const TITLES={dashboard:'דשבורד',contracts:'חוזים',sign:'חתימה על חוזים',workdays:'ימי עבודה',calendar:'לוח שנה',finance:'פירוט פיננסי',expenses:'הוצאות',maildocs:'קבלות מהמייל',settings:'הגדרות'};
@@ -2196,7 +2209,9 @@ function splitVat(amount, mode, vatPct){
 function computePay(wd){
   const s=settings();
   const c=resolveContract(wd);
-  const rate = wd.dayRate!=null?+wd.dayRate : (c&&c.dayRate!=null?+c.dayRate:0);
+  // `||0` matters: a non-numeric rate would make `agreed` NaN, and NaN poisons every total it
+  // is summed into until annualProjection's Math.max(0, …) reports the whole year as zero.
+  const rate = (wd.dayRate!=null? +wd.dayRate : (c&&c.dayRate!=null? +c.dayRate : 0)) || 0;
   const vatMode = vatModeOf(wd, c);
   // day-level value wins over the contract, so a day stays priced correctly even if its
   // contract is later deleted (deleteContract copies the terms down onto the day)
@@ -2221,8 +2236,12 @@ function computePay(wd){
       // ACT 2023 §5 bands (weekday, first-occurrence): base→12h ×1.5, 12→13h ×2.0, beyond 13h +0.5/hr,
       // integrated in quarter-hour steps (§5.8).
       const otTo12=+s.otTo12||1.5, ot12to13=+s.ot12to13||2.0, otStep=+s.otBeyond13Step||0.5;
-      for(let t=baseHours; t<worked-1e-9; t+=0.25){
-        const seg=Math.min(0.25, worked-t);
+      /* §5.8 bills overtime in quarter-hours ROUNDED UP. Wrap times are rarely on a quarter
+         (hoursBetween returns e.g. 14.33), so charging the exact fraction under-billed almost
+         every real day — a 07:00→21:20 day on a 10h base lost 127.50 before VAT. */
+      const otEnd = baseHours + Math.ceil((worked-baseHours)*4 - 1e-9)/4;
+      for(let t=baseHours; t<otEnd-1e-9; t+=0.25){
+        const seg=Math.min(0.25, otEnd-t);
         const m = t<12?otTo12 : (t<13?ot12to13 : ot12to13 + otStep*(Math.floor(t-13)+1));
         otPay += seg*hourly*m;
       }
@@ -2468,7 +2487,7 @@ function projMonthsHtml(projId, days){
     let pill;
     if(!nonT.length){ pill=`<span class="st tentative"><span class="d"></span>משוער</span>`; }
     else { const st=monthStatus(nonT);
-      pill=`<span class="st ${st}" onclick="event.stopPropagation();cycleMonthStatus('${projId}','${ym}')" style="cursor:pointer" title="סטטוס חשבונית לחודש — לחץ לשינוי (חל על כל ימי החודש)"><span class="d"></span>${statusLabel(st)}</span>`; }
+      pill=`<span class="st ${st}" onclick="event.stopPropagation();cycleMonthStatus('${projId}','${ym}',${nonT.length})" style="cursor:pointer" title="סטטוס חשבונית לחודש — לחץ לשינוי (חל על כל ימי החודש)"><span class="d"></span>${statusLabel(st)}</span>`; }
     let table;
     if(isMobile()){
       table='<div class="wd-cards" style="padding:10px 12px">'+md.map(w=>wdCardHtml(w,{showName:false,noStatus:true})).join('')+'</div>';
@@ -2501,12 +2520,20 @@ function monthStatus(nonTentativeDays){
   return 'unissued';
 }
 /* advance the whole month's invoice status in one click */
-function cycleMonthStatus(projId, ym){
+function cycleMonthStatus(projId, ym, shownCount){
   const list=load(LS.workdays,[]);
   const match=list.filter(w=>(w.projectId||'')===projId && monthKey(w.date)===ym && w.tentative!==true);
   if(!match.length) return;
   const order=['unissued','issued','paid','overdue'];
   const next=order[(order.indexOf(monthStatus(match))+1)%order.length];
+  /* The pill is drawn from the FILTERED rows, but this acts on every day of the month. With a
+     filter active the owner sees "2 days" and one click moves 8 — into a different invoice and
+     VAT period, unreviewed. Confirm whenever the click reaches beyond what is on screen. */
+  const shown=+shownCount||0;
+  if(shown && shown<match.length){
+    const lbl={unissued:'טרם הופקה',issued:'הופקה',paid:'שולם',overdue:'באיחור'}[next]||next;
+    if(!confirm(`בחודש הזה יש ${match.length} ימים, אבל הסינון הנוכחי מציג ${shown}.\nהפעולה תסמן את כל ${match.length} הימים כ"${lbl}".\n\nלהמשיך?`)) return;
+  }
   match.forEach(w=>{ w.status=next; });
   save(LS.workdays,list);
   const sc=document.querySelector('.content'); const top=sc?sc.scrollTop:0;
@@ -2623,8 +2650,9 @@ function openWorkday(id, presetDate, presetProjectId){
       <label class="fld">סטטוס תשלום<select id="wd_status">${stOpts}</select></label>
     </div>
     <label class="fld" style="margin-top:12px"><span class="row" style="gap:8px">
-      <select id="wd_vatmode" onchange="renderWdPreview()" style="max-width:260px">${
-        VAT_MODES.map(([k,l])=>`<option value="${k}" ${vatModeOf(w,_inhC)===k?'selected':''}>${l}</option>`).join('')}</select>
+      <select id="wd_vatmode" onchange="renderWdPreview()" style="max-width:260px">
+        <option value="" ${!w.vatMode?'selected':''}>לפי החוזה${_inhC?' ('+esc(vatModeLabel(vatModeOf(null,_inhC)))+')':''}</option>${
+        VAT_MODES.map(([k,l])=>`<option value="${k}" ${w.vatMode===k?'selected':''}>${l}</option>`).join('')}</select>
       <span class="faint" style="font-size:11.5px">מע"מ ${settings().vat}% · "כולל" מחלץ את המע"מ מתוך הסכום</span>
     </span></label>
     <label class="fld" style="margin-top:10px"><span class="row" style="gap:8px">
@@ -2652,7 +2680,8 @@ function onWdProjectChange(){
     const clientEl=document.getElementById('wd_client'); clientEl.placeholder=p.client||'ברירת מחדל מהפרויקט';
     const c=p.contractId?contractById(p.contractId):null;
     if(c){
-      document.getElementById('wd_vatmode').value=vatModeOf(null,c);
+      // leave the select on "inherit" so a later contract correction still reaches this day
+      document.getElementById('wd_vatmode').value='';
       const roleEl=document.getElementById('wd_role'); if(c.role && !roleEl.value) roleEl.value=c.role;
     }
   }
@@ -2662,7 +2691,7 @@ function onWdContractChange(){
   const cid=document.getElementById('wd_contract').value;
   const c=cid?contractById(cid):null;
   if(c){
-    document.getElementById('wd_vatmode').value=vatModeOf(null,c);
+    document.getElementById('wd_vatmode').value='';
     const roleEl=document.getElementById('wd_role'); if(c.role && !roleEl.value) roleEl.value=c.role;
   }
   renderWdPreview();
@@ -2694,15 +2723,26 @@ function readWdForm(){
     client:v('wd_client'), role:v('wd_role'),
     dayRate:num('wd_rate'), startTime:v('wd_start')||null, endTime:v('wd_end')||null, hoursWorked:num('wd_hours'),
     gearRental:num('wd_gear'), ring:v('wd_ring')||null, travel:num('wd_travel'), otherAdd:num('wd_other'),
-    vatMode:document.getElementById('wd_vatmode').value,
+    // '' = inherit from the contract. Storing null instead of a concrete mode is what lets a
+    // later correction to the contract still reach days already saved; the old form always
+    // stamped a mode, permanently freezing every day it touched.
+    vatMode:document.getElementById('wd_vatmode').value || null,
     tentative:document.getElementById('wd_tentative').checked,
     status:v('wd_status'), notes:v('wd_notes')
   };
 }
 function renderWdPreview(){
-  const p=computePay(readWdForm());
+  /* Preview the SAVED day merged with the form, not the form alone. readWdForm never emits
+     baseDayHours / overtimeModel / overtimeMultiplier / otBands, and saveWorkday merges over
+     the stored day — so the form-only preview priced a day differently from the day the app
+     would actually store (most visibly on days whose contract was deleted and its terms copied
+     down). The number on screen before שמור now matches the number after it. */
+  const stored = _editingWdId ? (load(LS.workdays,[]).find(x=>x.id===_editingWdId)||{}) : {};
+  const p=computePay(Object.assign({}, stored, readWdForm()));
   const f=n=>Math.round(n).toLocaleString('he-IL')+' ₪';
   let lines=`<div class="ln"><span>תעריף יום הבסיס</span><span class="num">${f(p.rate)}</span></div>`;
+  // which base-day length priced this — a missing contract value silently fell back to Settings
+  lines+=`<div class="ln"><span class="faint">יום בסיס ${(+p.baseHours).toFixed(2).replace(/\.?0+$/,'')} ש' · שעה = ${f(p.hourly)}</span><span></span></div>`;
   if(p.friBaseApplied) lines+=`<div class="ln"><span class="faint">יום שישי — יום בסיס מקוצר ל-${(+p.baseHours).toFixed(2).replace(/\.?0+$/,'')} ש' לפי החוזה</span><span></span></div>`;
   if(p.otPay>0){
     const otDesc = p.otModel==='bands'?'מדרגות החוזה'
@@ -3340,7 +3380,7 @@ function renderDashboard(){
   const projects=load(LS.projects,[]);
   const s=settings();
   const now=new Date(), ym=now.getFullYear()+'-'+String(now.getMonth()+1).padStart(2,'0');
-  const todayStr=now.toISOString().slice(0,10);
+  const todayStr=todayISO();   // NOT toISOString() — that reports yesterday until 03:00 Israel time
   const monthNames=MONTH_NAMES;
 
   const month=workdays.filter(w=>monthKey(w.date)===ym && w.tentative!==true);
@@ -3353,8 +3393,14 @@ function renderDashboard(){
     if((normDate(w.date)||'')<=todayStr){ doneExVat+=sub; doneDays++; } else aheadDays++;
   }
   const _proj=annualProjection(now.getFullYear());
-  const taxM=monthExVat*_proj.effRate, bit=bituachMonthly(monthExVat);   // annual effective rate, not month×12
-  const take=Math.max(0, monthExVat-taxM-bit);
+  /* Income tax and Bituach Leumi are charged on PROFIT, not turnover. This used to feed
+     `monthExVat` (the month's gross billings) into a rate whose denominator is profit, so the
+     landing screen overstated take-home by roughly a fifth against the finance page's figure
+     for the very same month — two headline numbers under the same Hebrew label. */
+  const _expM=expensesForMonth(ym);
+  const profitM=Math.max(0, monthExVat-_expM.deductible);
+  const taxM=profitM*_proj.effRate, bit=bituachMonthly(profitM);         // annual effective rate, not month×12
+  const take=Math.max(0, monthExVat-_expM.amount-taxM-bit);
   const f=n=>fmtMoney(Math.round(n));
 
   // genuinely-empty state → slim onboarding (only before any real data exists)
@@ -4406,7 +4452,7 @@ function openIncomeEntry(id){
   const e = id ? getIncome().find(x=>x.id===id) : null;
   _incomeEditId = e?e.id:null;
   document.getElementById('incomeTitle').textContent = e?'עריכת הכנסה חודשית':'הוספת הכנסה חודשית';
-  const nowYm=new Date().toISOString().slice(0,7);
+  const nowYm=todayISO().slice(0,7);   // toISOString() rolls back a month at 00:00-03:00 Israel time on the 1st
   document.getElementById('incomeBody').innerHTML=`
     <div class="grid" style="grid-template-columns:1fr 1fr">
       <label class="fld">חודש<input type="month" id="inc_month" value="${esc(e?e.month:nowYm)}"></label>
@@ -5129,7 +5175,7 @@ async function exportSignedPDF(){
 document.getElementById('signFile').addEventListener('change', e=>{ const f=e.target.files[0]; if(f) signLoadFile(f); e.target.value=''; });
 
 /* ---------- version + auto-update (keeps the installed PWA in sync with the site) ---------- */
-const APP_VERSION='2026.08.14.2';
+const APP_VERSION='2026.08.14.3';
 function setVersionLabels(){
   const a=document.getElementById('appVer'); if(a) a.textContent=APP_VERSION;
   const b=document.getElementById('appVerSettings'); if(b) b.textContent=APP_VERSION;
