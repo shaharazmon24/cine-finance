@@ -1559,7 +1559,8 @@ const EXTRACT_SYS = `אתה עוזר משפטי-פיננסי לצלם קולנו
  "currency": "₪ כברירת מחדל",
  "baseDayHours": מספר או null (אורך יום צילום סטנדרטי בשעות לפי החוזה — למשל 10 / 11 / 11.5 / 12. קריטי לחישוב שעות נוספות),
  "baseDayHoursFriEve": מספר או null (אורך יום בשישי/ערב חג),
- "overtimeModel": "act | flat | none — 'act' רק אם זהו חוזה אקט תקני עם מדרגות השעות הנוספות של אקט. 'flat' אם כל שעה נוספת משולמת כמכפיל קבוע מהתעריף השעתי (הנפוץ בחוזים פרטיים). 'none' אם אין תוספת עבור שעות נוספות. בחוזה שאינו אקט — כמעט תמיד flat.",
+ "overtimeModel": "bands | act | flat | none — **'bands' אם החוזה מפרט מדרגות משלו** (למשל 'שעה ראשונה 125%, שנייה 150%, שלישית 200%'), גם אם הן דומות לאקט. זו האפשרות הנכונה בכל פעם שכתובים בחוזה אחוזים לפי שעה. 'act' רק אם החוזה מפנה להסכם אקט מבלי לפרט מדרגות. 'flat' אם כל שעה נוספת = מכפיל קבוע אחד. 'none' אם אין תוספת. אם יש ספק בין bands ל-act — בחר bands ומלא otBands, כי מדרגות מפורשות בחוזה גוברות תמיד על טבלה כללית.",
+ "otBands": "מערך או null — חובה כאשר overtimeModel='bands'. כל איבר {\\"to\\": מספר או null, \\"mult\\": מספר}, כאשר 'to' הוא **שעת הסיום המוחלטת** של המדרגה מתחילת יום העבודה ו-'mult' הוא המכפיל (125% → 1.25). האיבר האחרון עם to=null הוא 'ומעלה'. דוגמה לחוזה עם יום בסיס 10.5 והמדרגות 10.5-11.5=125%, 11.5-12.5=150%, 12.5-13.5=200%, 13.5+=250%: [{\\"to\\":11.5,\\"mult\\":1.25},{\\"to\\":12.5,\\"mult\\":1.5},{\\"to\\":13.5,\\"mult\\":2},{\\"to\\":null,\\"mult\\":2.5}]",
  "overtimeMultiplier": מספר או null (למודל flat — המכפיל לשעה נוספת. אם כתוב 'שעה נוספת = 100% משעה' → 1.0 ; '125%' → 1.25 ; '150%' → 1.5),
  "totalContractDays": מספר או null (סה"כ ימי הצילום שהחוזה מדבר עליהם, אם מצוין — למשל 42),
  "paymentTerms": "תנאי התשלום, למשל שוטף+30",
@@ -1891,6 +1892,7 @@ function openReview(data){
     <div class="grid" style="grid-template-columns:1fr 1fr">
       <label class="fld">מודל שעות נוספות
         <select data-k="overtimeModel" onchange="reviewOtToggle()">
+          <option value="bands" ${otmVal==='bands'?'selected':''}>מדרגות לפי החוזה הזה</option>
           <option value="flat" ${otmVal==='flat'?'selected':''}>מכפיל אחיד לכל שעה נוספת</option>
           <option value="act" ${otmVal==='act'?'selected':''}>מדרגות אקט 2023</option>
           <option value="none" ${otmVal==='none'?'selected':''}>ללא תוספת ש"נ</option>
@@ -1900,7 +1902,11 @@ function openReview(data){
         <input data-k="overtimeMultiplier" type="number" step="0.05" value="${esc(otMultVal)}">
       </label>
     </div>
-    <div class="faint" style="font-size:11.5px;margin-top:6px">מכפיל 1.0 = כל שעה נוספת שווה 100% מהתעריף השעתי (תעריף יומי ÷ שעות יום בסיס). "אקט" = מדרגות אוטומטיות של הסכם אקט 2023. יום הבסיס נלקח מ"שעות יום בסיס (חול)" למעלה.</div>
+    <label class="fld" id="reviewOtBandsWrap" style="${otmVal==='bands'?'':'display:none'}">מדרגות החוזה — שורה לכל מדרגה
+      <textarea id="reviewOtBands" rows="6" placeholder="עד 11.5 = 125%&#10;עד 12.5 = 150%&#10;מעל = 350%">${esc(otBandsText(data))}</textarea>
+    </label>
+    <div class="faint" style="font-size:11.5px;margin-top:6px">"עד 11.5 = 125%" פירושו: מסוף יום הבסיס ועד שעה 11.5 של היום, כל שעה שווה 125% מהתעריף השעתי. השורה האחרונה "מעל = X%" חלה על כל מה שמעבר. מכפיל 1.0 = 100% מהתעריף השעתי (תעריף יומי ÷ שעות יום בסיס). יום הבסיס נלקח מ"שעות יום בסיס (חול)" למעלה.</div>
+    ${ladderWarnHtml(data)}
   </div>`;
   for(const [k,lbl] of [['overtimeRules','כללי שעות נוספות'],['invoiceFlow','זרימת חשבוניות'],['travelRules','כללי נסיעות'],['mealRules','כללי הסעדה'],['notes','הערות']]){
     const v=data[k]==null?'':data[k];
@@ -1913,7 +1919,39 @@ function openReview(data){
 function reviewOtToggle(){
   const sel=document.querySelector('#reviewBody [data-k="overtimeModel"]');
   const wrap=document.getElementById('reviewOtMultWrap');
+  const bw=document.getElementById('reviewOtBandsWrap');
   if(sel&&wrap) wrap.style.display = sel.value==='flat'?'':'none';
+  if(sel&&bw)   bw.style.display   = sel.value==='bands'?'':'none';
+}
+/* the ladder as editable lines: "עד 11.5 = 125%" / "מעל = 350%" */
+function otBandsText(c){
+  let bands = (c && Array.isArray(c.otBands) && c.otBands.length) ? c.otBands : parseOtBands(c&&c.overtimeRules);
+  if(!bands.length) return '';
+  return bands.map(b=> (b.to==null?'מעל':'עד '+b.to)+' = '+Math.round((+b.mult||0)*100)+'%').join('\n');
+}
+function parseOtBandsText(txt){
+  const out=[];
+  String(txt||'').split(/\n+/).forEach(line=>{
+    const t=line.trim(); if(!t) return;
+    const pct=t.match(/(\d+(?:\.\d+)?)\s*%/); if(!pct) return;
+    const mult=+pct[1]/100;
+    const upto=t.match(/(\d+(?:\.\d+)?)\s*(?==)|עד\s*(\d+(?:\.\d+)?)/);
+    const isOpen=/מעל|ומעלה|\+/.test(t.split('=')[0]);
+    const to = isOpen ? null : (upto ? +(upto[1]||upto[2]) : null);
+    out.push({to, mult});
+  });
+  return out.sort((a,b)=>(a.to==null?Infinity:a.to)-(b.to==null?Infinity:b.to));
+}
+/* If the contract's prose spells out a ladder that the selected model will not apply, say so
+   loudly at the moment of review — this is exactly the mismatch that mispriced משחקי השף. */
+function ladderWarnHtml(c){
+  const conflict = otLadderConflict(c);
+  if(!conflict) return '';
+  const shown = conflict.map(b=>(b.to==null?'מעל':'עד '+b.to)+' '+Math.round(b.mult*100)+'%').join(' · ');
+  return `<div class="md-note" style="margin:12px 0 0">
+    בטקסט החוזה מופיעות מדרגות משלו (${esc(shown)}) אבל המודל שנבחר לא ישתמש בהן, אלא יחשב לפי טבלה אחרת.
+    אם המדרגות האלה הן מה שסוכם — בחר <b>"מדרגות לפי החוזה הזה"</b>, והן ימולאו אוטומטית.
+  </div>`;
 }
 function saveReviewedContract(){
   const d=Object.assign({},_pendingContract);
@@ -1923,6 +1961,14 @@ function saveReviewedContract(){
     else if(el.type==='number') d[k]=el.value===''?null:Number(el.value);
     else d[k]=el.value;
   });
+  // the ladder is money, so it is stored as structured bands rather than left as prose
+  const bandsEl=document.getElementById('reviewOtBands');
+  if(d.overtimeModel==='bands'){
+    let bands = bandsEl ? parseOtBandsText(bandsEl.value) : [];
+    if(!bands.length) bands = parseOtBands(d.overtimeRules);   // fall back to the contract's own text
+    if(!bands.length){ alert('בחרת "מדרגות לפי החוזה" אבל לא הוזנה אף מדרגה. הזן לפחות מדרגה אחת, אחרת לא ישולמו שעות נוספות כלל.'); return; }
+    d.otBands=bands;
+  }
   const list=load(LS.contracts,[]);
   const i=list.findIndex(c=>c.id===d.id);
   if(i>=0) list[i]=d; else list.push(d);
@@ -2040,6 +2086,84 @@ function otModelOf(c){
 }
 function otMultOf(c){ return (c && c.overtimeMultiplier!=null && c.overtimeMultiplier!=='') ? +c.overtimeMultiplier : 1; }
 
+/* ---- Per-contract overtime ladders ('bands') --------------------------------------------
+   WHY THIS EXISTS: the engine used to know only 'act' | 'flat' | 'none'. A contract that
+   writes its OWN ladder — the משחקי השף contract pays 125% for the first overtime hour where
+   ACT pays 150% — could not be represented at all. The ladder was extracted into the free-text
+   `overtimeRules` field and then read by nothing, while the contract was tagged 'act' and
+   silently priced off the generic ACT table. A 15-hour day billed 3,471 instead of 3,300.
+   Free text that money depends on is a bug waiting to happen; the ladder is now structured
+   data (`otBands`) that computePay actually integrates.
+   Shape: [{to: 11.5, mult: 1.25}, ... , {to: null, mult: 3.5}] — `to` is the exclusive upper
+   bound in absolute hours worked, ascending, the last band may be open-ended. */
+function otBandsOf(wd, c){
+  const raw = (wd && Array.isArray(wd.otBands) && wd.otBands.length) ? wd.otBands
+            : (c && Array.isArray(c.otBands) && c.otBands.length) ? c.otBands : null;
+  if(!raw) return [];
+  return raw.map(b=>({ to: (b.to==null||b.to==='')?null:+b.to, mult:+b.mult||0 }))
+            .filter(b=>b.mult>0 || b.to!=null)
+            .sort((a,b)=>(a.to==null?Infinity:a.to)-(b.to==null?Infinity:b.to));
+}
+function otMultAtHour(bands, t){
+  for(const b of bands){ if(b.to==null || t < b.to-1e-9) return b.mult; }
+  return bands.length?bands[bands.length-1].mult:0;
+}
+/* Read a ladder out of the contract's own prose, e.g.
+   "שעה 10.5-11.5 = 125%, שעה 11.5-12.5 = 150% ... שעה 15.5+ = 350%".
+   Used to migrate contracts learned before `otBands` existed, and to detect a ladder in text
+   that contradicts the model actually driving the maths. */
+function parseOtBands(text){
+  if(!text) return [];
+  const s=String(text).replace(/[–—]/g,'-');
+  const out=[];
+  const ranged=/(\d+(?:\.\d+)?)\s*-\s*(\d+(?:\.\d+)?)\s*=\s*(\d+(?:\.\d+)?)\s*%/g;
+  let m; while((m=ranged.exec(s))) out.push({to:+m[2], mult:+m[3]/100});
+  const open=/(\d+(?:\.\d+)?)\s*\+\s*=\s*(\d+(?:\.\d+)?)\s*%/g;
+  while((m=open.exec(s))) out.push({to:null, mult:+m[2]/100});
+  return out.sort((a,b)=>(a.to==null?Infinity:a.to)-(b.to==null?Infinity:b.to));
+}
+/* One-time repair for contracts learned before `otBands` existed. A ladder written explicitly
+   in a contract always outranks a generic table, so where the prose spells one out and the
+   engine is pricing off something else, the contract wins. This CHANGES money on affected
+   days, which is the point — the previous figures were wrong — so it reports what it touched
+   instead of doing it silently. */
+function migrateOtLadders(){
+  const list=load(LS.contracts,[])||[]; const changed=[];
+  for(const c of list){
+    if(Array.isArray(c.otBands) && c.otBands.length) continue;
+    if(c.overtimeModel==='none') continue;              // "no overtime" is a real, deliberate term
+    const bands=parseOtBands(c.overtimeRules);
+    if(bands.length<2) continue;
+    c.otBands=bands; c.overtimeModel='bands';
+    changed.push({name:c.name, bands:bands.length});
+  }
+  if(changed.length){
+    save(LS.contracts,list);
+    console.warn('[CINE FINANCE] overtime ladders migrated to contract terms:', changed);
+    try{ localStorage.setItem('cf_otMigrationNote', JSON.stringify({at:Date.now(), changed})); }catch(e){}
+  }
+  return changed;
+}
+
+/* Does the contract's prose describe a ladder that the chosen model will NOT apply?
+   Returns the parsed ladder when it disagrees with what the engine would actually charge,
+   so the UI can say so instead of quietly billing a different number. */
+function otLadderConflict(c){
+  if(!c) return null;
+  const model = otModelOf(c);
+  if(model==='bands') return null;
+  const parsed = parseOtBands(c.overtimeRules);
+  if(parsed.length<2) return null;
+  const base = +c.baseDayHours || 10;
+  const rate = +c.dayRate || 0;
+  if(!rate || !base) return parsed;
+  // compare real money over a representative long day rather than comparing rule shapes
+  const hourly = rate/base, probe = base+4.5;
+  let ladder=0; for(let t=base;t<probe-1e-9;t+=0.25) ladder += 0.25*hourly*otMultAtHour(parsed,t);
+  const asIs = computePay({contractId:c.id, hoursWorked:probe}).otPay;
+  return Math.abs(asIs-ladder) > 1 ? parsed : null;
+}
+
 /* ---- How a fee relates to VAT ----------------------------------------------------------
    The old boolean could only say "add VAT on top" or "no VAT at all". A fee agreed as
    "כולל מע"מ" — very common with private clients — fell into the second case, so the app
@@ -2076,7 +2200,16 @@ function computePay(wd){
   const vatMode = vatModeOf(wd, c);
   // day-level value wins over the contract, so a day stays priced correctly even if its
   // contract is later deleted (deleteContract copies the terms down onto the day)
-  const baseHours = wd.baseDayHours? +wd.baseDayHours : ((c&&c.baseDayHours)? +c.baseDayHours : +s.baseHours||10);
+  /* Friday / holiday-eve days are contractually SHORTER for the same fee, so overtime starts
+     earlier. `baseDayHoursFriEve` was extracted from contracts and shown in the editor but read
+     by nothing — every Friday was priced against the weekday base and under-billed its overtime.
+     A day-level `baseDayHours` still wins, so a holiday eve can be set by hand. */
+  const _d = normDate(wd.date) ? new Date(normDate(wd.date)+'T00:00:00') : null;
+  const isFri = !!_d && _d.getDay()===5;
+  const friBase = (c && c.baseDayHoursFriEve!=null && c.baseDayHoursFriEve!=='') ? +c.baseDayHoursFriEve : null;
+  const baseHours = wd.baseDayHours ? +wd.baseDayHours
+                  : (isFri && friBase>0) ? friBase
+                  : ((c&&c.baseDayHours)? +c.baseDayHours : +s.baseHours||10);
   const hourly = baseHours>0?rate/baseHours:0;
   const worked = +wd.hoursWorked||0;
   const otHours = Math.max(0, worked-baseHours);
@@ -2093,6 +2226,19 @@ function computePay(wd){
         const m = t<12?otTo12 : (t<13?ot12to13 : ot12to13 + otStep*(Math.floor(t-13)+1));
         otPay += seg*hourly*m;
       }
+    } else if(otModel==='bands'){
+      // the ladder written in THIS contract, integrated in quarter-hour steps like the ACT one
+      const bands=otBandsOf(wd,c);
+      if(bands.length){
+        for(let t=baseHours; t<worked-1e-9; t+=0.25){
+          const seg=Math.min(0.25, worked-t);
+          otPay += seg*hourly*otMultAtHour(bands,t);
+        }
+      } else {
+        // model says 'bands' but none are defined — pay nothing extra rather than invent a
+        // rate; the work-day breakdown surfaces this so it cannot pass unnoticed
+        otPay = 0;
+      }
     } else if(otModel==='flat'){
       // each overtime hour = hourly × multiplier (e.g. ×1.0 = 100% of an hour's value)
       otPay = otHours*hourly*otMult;
@@ -2104,6 +2250,9 @@ function computePay(wd){
   return {
     rate, vatMode, plusVat: vatMode==='plus', baseHours, hourly, worked, otHours, otModel, otMult,
     otPay, gear, travel, other, agreed, sub, vat, total:sub+vat,
+    otBands: otModel==='bands'?otBandsOf(wd,c):[],
+    otBandsMissing: otModel==='bands' && otBandsOf(wd,c).length===0,
+    isFri, friBaseApplied: isFri && friBase>0 && !wd.baseDayHours,
     contractName: c?c.name:null
   };
 }
@@ -2554,7 +2703,20 @@ function renderWdPreview(){
   const p=computePay(readWdForm());
   const f=n=>Math.round(n).toLocaleString('he-IL')+' ₪';
   let lines=`<div class="ln"><span>תעריף יום הבסיס</span><span class="num">${f(p.rate)}</span></div>`;
-  if(p.otPay>0){ const otDesc = p.otModel==='act'?'מדרגות אקט' : (p.otModel==='flat'?`×${(+p.otMult).toFixed(2).replace(/\.?0+$/,'')} מהתעריף השעתי`:'ללא'); lines+=`<div class="ln"><span>שעות נוספות (${(+p.otHours).toFixed(2).replace(/\.?0+$/,'')} ש' · ${otDesc})</span><span class="num">${f(p.otPay)}</span></div>`; }
+  if(p.friBaseApplied) lines+=`<div class="ln"><span class="faint">יום שישי — יום בסיס מקוצר ל-${(+p.baseHours).toFixed(2).replace(/\.?0+$/,'')} ש' לפי החוזה</span><span></span></div>`;
+  if(p.otPay>0){
+    const otDesc = p.otModel==='bands'?'מדרגות החוזה'
+                 : p.otModel==='act'?'מדרגות אקט'
+                 : (p.otModel==='flat'?`×${(+p.otMult).toFixed(2).replace(/\.?0+$/,'')} מהתעריף השעתי`:'ללא');
+    lines+=`<div class="ln"><span>שעות נוספות (${(+p.otHours).toFixed(2).replace(/\.?0+$/,'')} ש' · ${otDesc})</span><span class="num">${f(p.otPay)}</span></div>`;
+    // show the ladder actually applied — the mispricing hid behind a label with no numbers
+    if(p.otModel==='bands' && p.otBands.length){
+      const seen=p.otBands.filter(b=>b.to==null || b.to>p.baseHours)
+        .map(b=>(b.to==null?'מעל':'עד '+b.to)+' '+Math.round(b.mult*100)+'%').join(' · ');
+      lines+=`<div class="ln"><span class="faint" style="font-size:11px">${esc(seen)}</span><span></span></div>`;
+    }
+  }
+  if(p.otBandsMissing && p.otHours>0) lines+=`<div class="ln"><span style="color:var(--bad)">לא הוגדרו מדרגות לחוזה — שעות נוספות לא חושבו</span><span></span></div>`;
   if(p.gear>0) lines+=`<div class="ln"><span>השכרת ציוד</span><span class="num">${f(p.gear)}</span></div>`;
   if(p.travel>0) lines+=`<div class="ln"><span>נסיעות</span><span class="num">${f(p.travel)}</span></div>`;
   if(p.other>0) lines+=`<div class="ln"><span>תוספת אחרת</span><span class="num">${f(p.other)}</span></div>`;
@@ -4576,7 +4738,7 @@ async function onAuthed(){
       } else {                        // cloud is the shared truth → adopt it
         try{ await maybeSnapshot(); }catch(e){}   // snapshot local first (safety net)
         const incoming=JSON.stringify(cloud);
-        if(incoming!==JSON.stringify(dumpData())){ applyData(cloud); normalizeAllDates(); refreshView(); }
+        if(incoming!==JSON.stringify(dumpData())){ applyData(cloud); normalizeAllDates(); migrateOtLadders(); refreshView(); }
         _lastSyncedJSON=incoming;
         setSync('synced');
       }
@@ -4595,7 +4757,7 @@ let _pendingRemote=null;
 function uiBusy(){ return !!document.querySelector('.modal-bg.open'); }
 function applyRemote(data){
   _lastSyncedJSON=JSON.stringify(data);
-  applyData(data); normalizeAllDates(); refreshView(); setSync('synced');
+  applyData(data); normalizeAllDates(); migrateOtLadders(); refreshView(); setSync("synced");
 }
 function flushRemote(){
   if(!_pendingRemote || uiBusy()) return;
@@ -4967,7 +5129,7 @@ async function exportSignedPDF(){
 document.getElementById('signFile').addEventListener('change', e=>{ const f=e.target.files[0]; if(f) signLoadFile(f); e.target.value=''; });
 
 /* ---------- version + auto-update (keeps the installed PWA in sync with the site) ---------- */
-const APP_VERSION='2026.08.12.5';
+const APP_VERSION='2026.08.14.2';
 function setVersionLabels(){
   const a=document.getElementById('appVer'); if(a) a.textContent=APP_VERSION;
   const b=document.getElementById('appVerSettings'); if(b) b.textContent=APP_VERSION;
@@ -5005,6 +5167,7 @@ if('serviceWorker' in navigator){
 
 /* ---------- boot ---------- */
 normalizeAllDates();   // fix any legacy/imported non-canonical dates so sort + calendar are correct
+migrateOtLadders();    // contracts that spell out their own overtime ladder must actually use it
 setVersionLabels();
 refreshKeyPill();
 renderDashboard();
