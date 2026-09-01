@@ -34,3 +34,6 @@ DESIGN.md
 
 # private scanned mail data — never publish (public Pages repo)
 cine-finance-mailscan-*.json
+
+# ACT calculator template — their file, never publish
+*.xlsx

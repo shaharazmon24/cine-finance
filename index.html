@@ -23,6 +23,7 @@
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <!-- pdf-lib — write/stamp signed PDFs (digital signing) -->
 <script src="https://cdn.jsdelivr.net/npm/pdf-lib@1.17.1/dist/pdf-lib.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
 <style>
 :root{
   --bg:#0b0d12; --bg2:#0e1017; --panel:#141820; --panel2:#191d27; --line:#1e2530; --line2:#2c3444;
@@ -259,6 +260,13 @@ label.fld input:focus,label.fld select:focus,label.fld textarea:focus{
 .finnote{color:var(--muted);font-size:12px;line-height:1.6;margin:10px 0}
 .fin-sub-h{margin:16px 0 2px;font-size:12px;font-weight:600;color:var(--muted)}
 /* expenses list */
+.actfill-head,.actfill-row{display:grid;grid-template-columns:1fr 110px 110px 60px;gap:10px;align-items:center}
+.actfill-head{font-size:11.5px;opacity:.55;padding:0 0 6px}
+.actfill-row{padding:7px 0;border-top:1px solid var(--line)}
+.actfill-row input{font:inherit;font-size:13px;padding:5px 8px;border-radius:8px;border:1px solid var(--line);background:transparent;color:inherit}
+.af-d{font-size:13px}
+.af-h{font-size:12px;text-align:start}
+@media(max-width:760px){.actfill-head{display:none}.actfill-row{grid-template-columns:1fr 1fr 1fr 44px;gap:6px}}
 /* ---------- Mail docs (receipts scanned out of Gmail) ---------- */
 .md-strip{display:grid;grid-template-columns:repeat(auto-fill,minmax(124px,1fr));gap:10px}
 /* base `button{}` sets no color, so a <button> falls back to the UA's black buttontext —
@@ -871,6 +879,7 @@ td[title="לחץ לשינוי סטטוס"]:hover .st{border-color:var(--accent-d
       <section class="view" id="view-settings">
         <div class="grid" style="max-width:640px">
           <div class="card" id="syncCard"></div>
+          <div class="card" id="actTplCard"></div>
           <div class="card">
             <h3 style="margin:0 0 4px;font-weight:500">מפתח Anthropic API</h3>
             <p class="muted" style="margin:0 0 14px;font-size:13px;line-height:1.6">נשמר מקומית בדפדפן בלבד (localStorage). נדרש כדי לקרוא חוזים. <a href="https://console.anthropic.com/settings/keys" target="_blank" style="color:var(--accent)">השג מפתח →</a></p>
@@ -1093,6 +1102,15 @@ td[title="לחץ לשינוי סטטוס"]:hover .st{border-color:var(--accent-d
   </div>
 </div>
 
+<!-- ACT hours quick-fill -->
+<div class="modal-bg" id="actFillModal"><div class="modal">
+  <div class="modal-head"><h3 id="actFillTitle">שעות</h3><button class="x" onclick="closeModal('actFillModal')">×</button></div>
+  <div class="modal-body" id="actFillBody"></div>
+  <div class="modal-foot">
+    <button class="btn" onclick="closeModal('actFillModal')">ביטול</button>
+    <button class="btn primary" onclick="actFillSave()">שמור שעות</button>
+  </div>
+</div></div>
 <!-- Historical income (manual add / Morning-import review) modal -->
 <div class="modal-bg" id="incomeModal" style="z-index:60">
   <div class="modal" style="width:min(560px,100%)">
@@ -1369,7 +1387,7 @@ function go(v){
   if(v==='expenses') renderExpenses();
   if(v==='maildocs') renderMailDocs();
   if(v==='sign') renderSigner();
-  if(v==='settings') fillSettings();
+  if(v==='settings'){ fillSettings(); renderActTplUI(); }
 }
 document.getElementById('nav').addEventListener('click',e=>{ const b=e.target.closest('button'); if(b && b.dataset.view) go(b.dataset.view); });
 function openMoreSheet(){ document.getElementById('moreSheet').classList.add('open'); }
@@ -2500,6 +2518,8 @@ function projMonthsHtml(projId, days){
         <span class="pmonth-name">${monthName(ym)}</span>
         <span class="pmonth-meta">${md.length} ימים · ${fmtMoney(Math.round(mg))}</span>
         <span class="pmonth-inv"><span class="faint">חשבונית חודשית:</span> ${pill}</span>
+        <button class="btn sm ghost" onclick="event.stopPropagation();actOpenHoursFill('${projId}','${ym}',false)" title="הזנת שעות מהירה לכל ימי החודש">שעות</button>
+        <button class="btn sm ghost" onclick="event.stopPropagation();exportActCalc('${projId}','${ym}')" title="ייצא מחשבון אקט ממולא לחודש הזה">מחשבון אקט</button>
       </div>
       ${table}</div>`;
   }
@@ -5174,8 +5194,239 @@ async function exportSignedPDF(){
 }
 document.getElementById('signFile').addEventListener('change', e=>{ const f=e.target.files[0]; if(f) signLoadFile(f); e.target.value=''; });
 
+
+/* ---- ACT calculator export ---------------------------------------------------------------
+   Fills ACT's own workbook with a month's shooting days and leaves it untouched in every other
+   respect. The app deliberately does NOT compute money into the sheet — ACT's formulas do that,
+   which is what gives the document its standing with a production, and it turns the two engines
+   into a check on each other. (Verified 2026-09-01: ACT's sheet at base 10.5 and computePay
+   agree to the agora across 11-16 hour days.)
+   The template is ACT's file, so it lives per-device in IndexedDB and never in the repo. */
+const ACT_TPL_KEY='actTemplate';
+const HEB_MONTHS=['ינואר','פברואר','מרץ','אפריל','מאי','יוני','יולי','אוגוסט','ספטמבר','אוקטובר','נובמבר','דצמבר'];
+const ACT_WEEKDAY_LADDER=[1.25,1.5,2,2.5,3,3.5];
+
+async function actGetTemplate(){ try{ return await idbGet(ACT_TPL_KEY); }catch(e){ return null; } }
+async function actSaveTemplateFile(input){
+  const f=input.files&&input.files[0]; input.value='';
+  if(!f) return;
+  try{
+    const data=await f.arrayBuffer();
+    const zip=await JSZip.loadAsync(data);
+    const wbx=await zip.file('xl/workbook.xml').async('string');
+    const sheets=[...wbx.matchAll(/<sheet name="([^"]+)"/g)].map(m=>m[1]);
+    if(!sheets.length) throw new Error('לא נמצאו גיליונות בקובץ');
+    await idbSet(ACT_TPL_KEY,{name:f.name, at:Date.now(), size:f.size, sheets, data});
+    renderActTplUI();
+    alert('התבנית נשמרה.\n\nחודשים זמינים: '+(sheets.filter(s=>/\d{4}/.test(s)).join(' · ')||'—'));
+  }catch(e){ alert('לא הצלחתי לקרוא את הקובץ כתבנית אקסל: '+e.message); }
+}
+async function actForgetTemplate(){
+  if(!confirm('להסיר את תבנית מחשבון אקט מהמכשיר הזה?')) return;
+  await idbSet(ACT_TPL_KEY,null); renderActTplUI();
+}
+async function renderActTplUI(){
+  const el=document.getElementById('actTplCard'); if(!el) return;
+  const t=await actGetTemplate();
+  const months=(t&&t.sheets)?t.sheets.filter(s=>/\d{4}/.test(s)):[];
+  el.innerHTML='<h3 style="margin:0 0 4px;font-weight:500">תבנית מחשבון אקט</h3>'+
+    '<p class="muted" style="margin:0 0 14px;font-size:13px;line-height:1.6">קובץ המחשבון של אקט. ממנו מיוצר מחשבון ממולא לכל פרויקט ולכל חודש. נשמר במכשיר הזה בלבד — לא נדחף לריפו הציבורי.</p>'+
+    (t ? '<div class="paybreak"><div class="ln"><span>'+esc(t.name)+'</span><span class="faint">'+Math.round(t.size/1024)+'KB</span></div>'+
+         '<div class="ln"><span class="faint">חודשים בתבנית</span><span class="faint">'+(months.length?esc(months.join(' · ')):'—')+'</span></div></div>'+
+         '<div style="height:10px"></div>'+
+         '<button class="btn sm" onclick="document.getElementById(\'actTplFile\').click()">החלף תבנית</button> '+
+         '<button class="btn sm ghost" onclick="actForgetTemplate()">הסר</button>'
+       : '<button class="btn primary" onclick="document.getElementById(\'actTplFile\').click()">בחר את קובץ המחשבון</button>')+
+    '<input type="file" id="actTplFile" accept=".xlsx" style="display:none" onchange="actSaveTemplateFile(this)">';
+}
+
+/* Excel counts days from 1899-12-30 */
+function actSerial(iso){ const d=normDate(iso); if(!d) return null;
+  return Math.round((Date.parse(d+'T00:00:00Z')-Date.UTC(1899,11,30))/86400000); }
+function actTimeFrac(hhmm){ const m=/^(\d{1,2}):(\d{2})$/.exec(String(hhmm||'').trim());
+  if(!m) return null; return (+m[1]+(+m[2])/60)/24; }
+
+/* Write a number into a cell, refusing to touch anything carrying a formula. */
+function actSetNum(xml, ref, num){
+  const re=new RegExp('<c r="'+ref+'"([^>]*?)(?:/>|>([\\s\\S]*?)</c>)');
+  const m=xml.match(re);
+  if(!m) return {xml:xml, ok:false, why:'התא '+ref+' לא נמצא בגיליון'};
+  if(m[2] && m[2].indexOf('<f')>=0) return {xml:xml, ok:false, why:'התא '+ref+' מכיל נוסחה — לא נגעתי בו'};
+  const attrs=(m[1]||'').replace(/\s*t="[^"]*"/,'');
+  const rep='<c r="'+ref+'"'+attrs+'><v>'+num+'</v></c>';
+  return {xml: xml.slice(0,m.index)+rep+xml.slice(m.index+m[0].length), ok:true};
+}
+/* date serial -> row number, read from the sheet rather than assumed */
+function actDateRows(xml){
+  /* the formula may be written in full (<f>..</f>) or as a shared-formula stub (<f/>) — the
+     first version of this only matched the long form and silently found 10 rows out of 42 */
+  const map={}; const re=/<c r="C(\d+)"[^>]*?>(?:<f[^>]*?(?:\/>|>[\s\S]*?<\/f>))?<v>(\d+(?:\.\d+)?)<\/v><\/c>/g;
+  let m; while((m=re.exec(xml))){ const s=Math.round(+m[2]); if(s>40000&&s<60000) map[s]=+m[1]; }
+  return map;
+}
+/* Make the weekday length selectable. Idempotent — an already-converted template passes through. */
+function actParameterize(xml){
+  if(xml.indexOf('$AL$2')<0){
+    if(xml.indexOf('TIME(11,0,0)')<0) return {xml:xml, ok:false, why:'הגיליון אינו נראה כמחשבון אקט של 11 שעות — לא שיניתי בו כלום.'};
+    xml=xml.split('TIME(11,0,0)').join('$AL$2/24')
+           .split('/11*').join('/$AL$2*').split('/11/').join('/$AL$2/').split('/11<').join('/$AL$2<');
+    xml=xml.replace('<c r="AL2" s="261"/>','<c r="AL2" s="601"><v>11</v></c>');
+    xml=xml.replace('<c r="AL3" s="601"><v>9.5</v></c>','<c r="AL3" s="601"><f>$AL$2-1.5</f><v>9.5</v></c>');
+  }
+  return {xml:xml, ok: xml.indexOf('$AL$2')>=0, why:'לא הצלחתי להפוך את אורך היום לפרמטר'};
+}
+/* Where a contract writes its own ladder, say how it differs from ACT's before exporting */
+function actLadderMismatch(c){
+  const bands=otBandsOf(null,c);
+  if(!bands.length) return null;
+  const base=(c&&c.baseDayHours)?+c.baseDayHours:10.5;
+  const out=[];
+  for(let h=1;h<=6;h++){
+    const act=ACT_WEEKDAY_LADDER[h-1], own=otMultAtHour(bands, base+h-0.5);
+    if(Math.abs(act-own)>1e-9) out.push({hour:h, act:act, own:own});
+  }
+  return out.length?out:null;
+}
+
+/* ---- quick hours fill ----------------------------------------------------------------------
+   In ACT's sheet a day with no times is worth 0, and a day with only a call time is worth half.
+   So "the day was shot, it just had no overtime" still needs both times on the document. This
+   is the fastest path from that realisation to a complete month: every day of the project in
+   the month, two fields each, one save. */
+let _actFillCtx=null;
+function actOpenHoursFill(projId, ym, onlyMissing){
+  const proj=projectById(projId);
+  const days=load(LS.workdays,[]).filter(w=>(w.projectId||'')===projId && monthKey(w.date)===ym)
+               .sort((a,b)=>(normDate(a.date)||'').localeCompare(normDate(b.date)||''));
+  const rows=onlyMissing?days.filter(w=>!w.startTime||!w.endTime):days;
+  if(!rows.length){ alert('לכל הימים בחודש הזה כבר יש שעות.'); return; }
+  _actFillCtx={projId:projId, ym:ym};
+  const c=resolveContract(days[0]);
+  const base=(c&&c.baseDayHours)?+c.baseDayHours:(+settings().baseHours||10);
+  document.getElementById('actFillTitle').textContent='שעות — '+((proj&&proj.name)||'')+' · '+monthName(ym);
+  document.getElementById('actFillBody').innerHTML=
+    '<div class="faint" style="font-size:12.5px;line-height:1.7;margin-bottom:12px">יום בסיס '+base+' ש\' לפי החוזה. '+
+    'במחשבון של אקט יום בלי שעות שווה 0 ₪, ורק שעת התחלה = חצי יום — לכן כדאי למלא את שניהם לכל יום שצולם.<br>'+
+    'טיפ: אפשר למלא שורה אחת וללחוץ <b>החל על כל הריקים</b>.</div>'+
+    '<div class="actfill-head"><span>תאריך</span><span>התחלה</span><span>סיום</span><span>שעות</span></div>'+
+    rows.map(function(w){
+      const d=normDate(w.date), dt=new Date(d+'T00:00:00');
+      const dow=['א','ב','ג','ד','ה','ו','ש'][dt.getDay()];
+      return '<div class="actfill-row" data-id="'+w.id+'">'+
+        '<span class="af-d">'+d.slice(8)+'/'+d.slice(5,7)+' <span class="faint">'+dow+'</span></span>'+
+        '<input type="time" class="af-s" value="'+esc(w.startTime||'')+'" oninput="actFillRecalc(this)">'+
+        '<input type="time" class="af-e" value="'+esc(w.endTime||'')+'" oninput="actFillRecalc(this)">'+
+        '<span class="af-h faint">'+((w.startTime&&w.endTime)?hoursBetween(w.startTime,w.endTime).toFixed(2):'—')+'</span>'+
+      '</div>';
+    }).join('')+
+    '<div style="margin-top:14px"><button class="btn sm ghost" onclick="actFillApplyAll()">החל על כל הריקים</button></div>';
+  openModal('actFillModal');
+}
+function actFillRecalc(el){
+  const row=el.closest('.actfill-row');
+  const s=row.querySelector('.af-s').value, e=row.querySelector('.af-e').value;
+  row.querySelector('.af-h').textContent=(s&&e)?hoursBetween(s,e).toFixed(2):'—';
+}
+function actFillApplyAll(){
+  const rows=[...document.querySelectorAll('#actFillBody .actfill-row')];
+  const first=rows.find(function(r){ return r.querySelector('.af-s').value && r.querySelector('.af-e').value; });
+  if(!first){ alert('מלא קודם שורה אחת, ואז אפשר להחיל אותה על השאר.'); return; }
+  const s=first.querySelector('.af-s').value, e=first.querySelector('.af-e').value;
+  let n=0;
+  rows.forEach(function(r){
+    const si=r.querySelector('.af-s'), ei=r.querySelector('.af-e');
+    if(!si.value && !ei.value){ si.value=s; ei.value=e; actFillRecalc(si); n++; }
+  });
+  if(!n) alert('אין שורות ריקות להחיל עליהן.');
+}
+function actFillSave(){
+  const list=load(LS.workdays,[]); let n=0;
+  document.querySelectorAll('#actFillBody .actfill-row').forEach(function(r){
+    const w=list.find(function(x){ return x.id===r.dataset.id; }); if(!w) return;
+    const s=r.querySelector('.af-s').value||null, e=r.querySelector('.af-e').value||null;
+    if(w.startTime===s && w.endTime===e) return;
+    w.startTime=s; w.endTime=e;
+    // hours follow the times, exactly as the work-day form does
+    if(s&&e) w.hoursWorked=hoursBetween(s,e); else if(!s&&!e) w.hoursWorked=null;
+    n++;
+  });
+  save(LS.workdays,list);
+  closeModal('actFillModal');
+  refreshView();
+  if(n) alert('עודכנו '+n+' ימים.');
+}
+
+async function exportActCalc(projId, ym){
+  try{
+    const tpl=await actGetTemplate();
+    if(!tpl||!tpl.data){ alert('עוד לא נטענה תבנית מחשבון אקט.\nהגדרות → תבנית מחשבון אקט → בחר את הקובץ.'); return; }
+    const proj=projectById(projId);
+    const days=load(LS.workdays,[]).filter(function(w){ return (w.projectId||'')===projId && monthKey(w.date)===ym; })
+                 .sort(function(a,b){ return (normDate(a.date)||'').localeCompare(normDate(b.date)||''); });
+    if(!days.length){ alert('אין ימים לפרויקט הזה בחודש הזה.'); return; }
+    const c=resolveContract(days[0]);
+    const rate=(days[0].dayRate!=null?+days[0].dayRate:(c&&c.dayRate!=null?+c.dayRate:0))||0;
+    const base=(c&&c.baseDayHours)?+c.baseDayHours:(+settings().baseHours||10);
+
+    const noTimes=days.filter(function(w){ return actTimeFrac(w.startTime)==null||actTimeFrac(w.endTime)==null; });
+    if(noTimes.length){
+      const go=confirm('ב-'+noTimes.length+' מתוך '+days.length+' ימים חסרות שעות ('+noTimes.map(function(w){return normDate(w.date).slice(8);}).join(', ')+').\n\n'+
+        'במחשבון של אקט יום בלי שעות שווה 0 ₪ ורק שעת התחלה = חצי יום.\n\nלמלא אותן עכשיו? (ביטול = לייצא בכל זאת)');
+      if(go){ actOpenHoursFill(projId, ym, true); return; }
+    }
+    const mism=actLadderMismatch(c);
+    if(mism){
+      const txt=mism.map(function(r){ return 'שעה '+r.hour+': החוזה '+Math.round(r.own*100)+'% מול אקט '+Math.round(r.act*100)+'%'; }).join('\n  ');
+      if(!confirm('סולם השעות הנוספות בחוזה שונה מזה של אקט:\n  '+txt+'\n\nהמחשבון יחשב לפי אקט, ולכן המספר בו יהיה שונה מזה שבאפליקציה.\n\nלהמשיך?')) return;
+    }
+
+    const zip=await JSZip.loadAsync(tpl.data);
+    const wbx=await zip.file('xl/workbook.xml').async('string');
+    const relx=await zip.file('xl/_rels/workbook.xml.rels').async('string');
+    const want=HEB_MONTHS[+ym.slice(5,7)-1]+' '+ym.slice(0,4);
+    const sheet=[...wbx.matchAll(/<sheet name="([^"]+)"[^>]*r:id="(rId\d+)"/g)].find(function(m){ return m[1].trim()===want; });
+    if(!sheet){
+      const have=[...wbx.matchAll(/<sheet name="([^"]+)"/g)].map(function(m){return m[1];}).filter(function(s){return /\d{4}/.test(s);});
+      alert('בתבנית אין גיליון לחודש "'+want+'".\nקיימים: '+have.join(' · ')+'\n\nכשאקט מוציאים קובץ מעודכן — טען אותו בהגדרות.'); return;
+    }
+    const tgt=(relx.match(new RegExp('Id="'+sheet[2]+'"[^>]*Target="([^"]+)"'))||[])[1];
+    if(!tgt){ alert('לא הצלחתי לאתר את הגיליון בתוך הקובץ.'); return; }
+    const path='xl/'+tgt.replace(/^\/?xl\//,'').replace(/^\//,'');
+
+    let xml=await zip.file(path).async('string');
+    const par=actParameterize(xml); if(!par.ok){ alert(par.why); return; } xml=par.xml;
+
+    let r=actSetNum(xml,'AL2',base); if(!r.ok){ alert('אורך יום: '+r.why); return; } xml=r.xml;
+    if(rate){ r=actSetNum(xml,'AO4',rate); if(!r.ok){ alert('תעריף יומי: '+r.why); return; } xml=r.xml; }
+
+    const rows=actDateRows(xml); const missing=[]; let filled=0;
+    for(const w of days){
+      const row=rows[actSerial(w.date)];
+      if(!row){ missing.push(normDate(w.date)); continue; }
+      const st=actTimeFrac(w.startTime), en=actTimeFrac(w.endTime);
+      if(st!=null){ r=actSetNum(xml,'F'+row,st); if(r.ok) xml=r.xml; }
+      if(en!=null){ r=actSetNum(xml,'H'+row,en); if(r.ok) xml=r.xml; }
+      if(st!=null&&en!=null) filled++;
+    }
+    if(missing.length) alert('התאריכים הבאים לא נמצאו בגיליון ולא מולאו:\n'+missing.join(', '));
+
+    zip.file(path, xml);
+    let wb2=wbx;
+    if(wb2.indexOf('fullCalcOnLoad')<0) wb2=wb2.replace(/<calcPr([^/>]*)\/>/, '<calcPr$1 fullCalcOnLoad="1"/>');
+    zip.file('xl/workbook.xml', wb2);
+
+    const blob=await zip.generateAsync({type:'blob', compression:'DEFLATE', compressionOptions:{level:6}});
+    const name=(((proj&&proj.name)||'פרויקט')+' — '+want+'.xlsx').replace(/[\\/:*?"<>|]/g,'-');
+    const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download=name;
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(function(){ URL.revokeObjectURL(a.href); }, 4000);
+    alert('נוצר: '+name+'\n\n'+filled+' ימים עם שעות מלאות'+(noTimes.length?' · '+noTimes.length+' ללא שעות (יופיעו כ-0)':'')+
+          '\nאורך יום: '+base+' ש\' · תעריף: '+fmtMoney(rate));
+  }catch(e){ alert('הייצוא נכשל: '+e.message); }
+}
+
 /* ---------- version + auto-update (keeps the installed PWA in sync with the site) ---------- */
-const APP_VERSION='2026.08.14.3';
+const APP_VERSION='2026.09.01.1';
 function setVersionLabels(){
   const a=document.getElementById('appVer'); if(a) a.textContent=APP_VERSION;
   const b=document.getElementById('appVerSettings'); if(b) b.textContent=APP_VERSION;
