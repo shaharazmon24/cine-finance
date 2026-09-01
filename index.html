@@ -2330,11 +2330,24 @@ function computePay(wd){
   const baseHours = wd.baseDayHours ? +wd.baseDayHours
                   : (isFri && friBase>0) ? friBase
                   : ((c&&c.baseDayHours)? +c.baseDayHours : +s.baseHours||10);
-  const hourly = baseHours>0?rate/baseHours:0;
-  /* Times are what ACT's document is built on, so they win when the hours field was never
-     filled — an AI-imported day carries a call time long before anyone types hours. */
   const worked = (+wd.hoursWorked||0) ||
     ((wd.startTime && wd.endTime) ? hoursBetween(wd.startTime, wd.endTime) : 0);
+  const autoPct = (worked>0 && worked<6)
+    ? (worked<4?0.5 : worked<5?0.6 : 0.7) : 1;
+  const dayType = wd.dayType||'';           // '' = graded automatically by the hours worked
+  const feePct = dayType==='full' ? 1
+               : dayType==='half' ? 0.5     // a half day agreed as such, whatever the hours
+               : ((c && c.noHalfDay===true) ? 1 : autoPct);
+  const shortDay = feePct<1;
+  const fee = rate*feePct;
+
+  /* ACT's E is the fee for THIS row's rate tier and its hourly is E divided by the day
+     length, so a half day carries a half hourly rate and its overtime halves too. Deriving
+     the hourly from the full day rate instead put the app 53.57 above the calculator on a
+     day marked as half. */
+  const hourly = baseHours>0?fee/baseHours:0;
+  /* Times are what ACT's document is built on, so they win when the hours field was never
+     filled — an AI-imported day carries a call time long before anyone types hours. */
   const otHours = Math.max(0, worked-baseHours);
   const otModel = wd.overtimeModel || otModelOf(c);
   const otMult = (wd.overtimeMultiplier!=null && wd.overtimeMultiplier!=='') ? +wd.overtimeMultiplier : otMultOf(c);
@@ -2411,12 +2424,6 @@ function computePay(wd){
   /* ACT §5.13 — a short day is a graded fraction of the fee, not a full one: 0-4h 50%,
      4-5h 60%, 5-6h 70%, 6h and over 100%. Without this a 5.25-hour day was billed as a whole
      day. Applies only once times exist, so a day still waiting for its hours is untouched. */
-  const halfPct = (worked>0 && worked<6)
-    ? (worked<4?0.5 : worked<5?0.6 : 0.7) : 1;
-  const shortDay = halfPct<1 && !(c && c.noHalfDay===true);
-  const feePct = shortDay?halfPct:1;
-  const fee = rate*feePct;
-
   const gear=+wd.gearRental||0, travel=+wd.travel||0, other=+wd.otherAdd||0;
   const agreed = fee + otPay + nightPay + restPayAmt + shabPay + mealPay + travelHrsPay
                + gear + travel + other;   // the figure actually agreed with the client
@@ -2425,7 +2432,7 @@ function computePay(wd){
     rate, vatMode, plusVat: vatMode==='plus', baseHours, hourly, worked, otHours, otModel, otMult,
     otPay, gear, travel, other, agreed, sub, vat, total:sub+vat,
     nightHrs, nightPay, restShort, restPay:restPayAmt,
-    isSat, shabHrs, shabPay, lateLunch, shortLunch, mealPay, fee, feePct, shortDay,
+    isSat, shabHrs, shabPay, lateLunch, shortLunch, mealPay, fee, feePct, shortDay, dayType,
     travelH:{t1:tr1,t15:tr15,t2:tr2}, travelHrsPay,
     otBands: otModel==='bands'?otBandsOf(wd,c):[],
     otBandsMissing: otModel==='bands' && otBandsOf(wd,c).length===0,
@@ -2810,6 +2817,12 @@ function openWorkday(id, presetDate, presetProjectId){
     </div>
     <div class="faint" style="font-size:12px;margin:14px 0 6px">תוספות שעתיות — בדיוק כמו במחשבון של אקט. משולמות לפי התעריף השעתי של היום.</div>
     <div class="grid" style="grid-template-columns:1fr 1fr 1fr">
+      <label class="fld">אורך היום
+        <select id="wd_daytype" onchange="renderWdPreview()">
+          <option value="" ${!w.dayType?'selected':''}>אוטומטי — לפי השעות (אקט §5.13)</option>
+          <option value="half" ${w.dayType==='half'?'selected':''}>חצי יום — 50%</option>
+          <option value="full" ${w.dayType==='full'?'selected':''}>יום מלא</option>
+        </select></label>
       <label class="fld">שעות שבת<input type="number" step="0.25" id="wd_shab" value="${w.shabbatHours!=null?esc(w.shabbatHours):''}" placeholder="100% נוספים" oninput="renderWdPreview()"></label>
       <label class="fld">איחור בהפסקה (ש')<input type="number" step="0.25" id="wd_lateL" value="${w.lateLunch!=null?esc(w.lateLunch):''}" placeholder="×1" oninput="renderWdPreview()"></label>
       <label class="fld">קיצור הפסקה (ש')<input type="number" step="0.25" id="wd_shortL" value="${w.shortLunch!=null?esc(w.shortLunch):''}" placeholder="×2" oninput="renderWdPreview()"></label>
@@ -2892,7 +2905,7 @@ function readWdForm(){
     client:v('wd_client'), role:v('wd_role'),
     dayRate:num('wd_rate'), startTime:v('wd_start')||null, endTime:v('wd_end')||null, hoursWorked:num('wd_hours'),
     gearRental:num('wd_gear'), ring:v('wd_ring')||null, travel:num('wd_travel'), otherAdd:num('wd_other'),
-    shabbatHours:num('wd_shab'), lateLunch:num('wd_lateL'), shortLunch:num('wd_shortL'),
+    dayType:v('wd_daytype')||null, shabbatHours:num('wd_shab'), lateLunch:num('wd_lateL'), shortLunch:num('wd_shortL'),
     travelH1:num('wd_tr1'), travelH15:num('wd_tr15'), travelH2:num('wd_tr2'),
     // '' = inherit from the contract. Storing null instead of a concrete mode is what lets a
     // later correction to the contract still reach days already saved; the old form always
@@ -2912,7 +2925,7 @@ function renderWdPreview(){
   const p=computePay(Object.assign({}, stored, readWdForm()));
   const f=n=>Math.round(n).toLocaleString('he-IL')+' ₪';
   let lines=`<div class="ln"><span>תעריף יום הבסיס</span><span class="num">${f(p.rate)}</span></div>`;
-  if(p.shortDay) lines+=`<div class="ln"><span style="color:var(--accent)">יום מקוצר — ${Math.round(p.feePct*100)}% לפי אקט §5.13 (${(+p.worked).toFixed(2).replace(/\.?0+$/,'')} ש')</span><span class="num">${f(p.fee)}</span></div>`;
+  if(p.shortDay) lines+=`<div class="ln"><span style="color:var(--accent)">${p.dayType==='half'?'חצי יום — 50%':'יום מקוצר — '+Math.round(p.feePct*100)+'% לפי אקט §5.13 ('+(+p.worked).toFixed(2).replace(/\.?0+$/,'')+" ש')"}</span><span class="num">${f(p.fee)}</span></div>`;
   // which base-day length priced this — a missing contract value silently fell back to Settings
   lines+=`<div class="ln"><span class="faint">יום בסיס ${(+p.baseHours).toFixed(2).replace(/\.?0+$/,'')} ש' · שעה = ${f(p.hourly)}</span><span></span></div>`;
   if(p.friBaseApplied) lines+=`<div class="ln"><span class="faint">יום שישי — יום בסיס מקוצר ל-${(+p.baseHours).toFixed(2).replace(/\.?0+$/,'')} ש' לפי החוזה</span><span></span></div>`;
@@ -5555,28 +5568,27 @@ async function exportActCalc(projId, ym){
     const par=actParameterize(xml); if(!par.ok){ alert(par.why); return; } xml=par.xml;
 
     let r=actSetNum(xml,'AL2',base); if(!r.ok){ alert('אורך יום: '+r.why); return; } xml=r.xml;
-    if(rate){ r=actSetNum(xml,'AO4',rate); if(!r.ok){ alert('תעריף יומי: '+r.why); return; } xml=r.xml; }
 
-    /* ACT's sheet has no half-day field — its own AN only knows "no end time = half". A short
-       day is expressed the way the owner already does it by hand: rate tier 2 with its own fee.
-       Only done when every short day in the month shares one fee and tier 2 is still untouched,
-       otherwise the export says so rather than overwriting a tier that means something else. */
-    const shortDays=days.filter(function(w){ return computePay(w).shortDay; });
-    let shortFee=null, useTier2=false;
-    if(shortDays.length){
-      const fees=[...new Set(shortDays.map(function(w){ return +computePay(w).fee.toFixed(2); }))];
-      const tierFree=xml.indexOf('<v>1500</v>')>=0 && /<c r="AO5"[^>]*>[\s\S]{0,40}?1500/.test(xml);
-      if(fees.length===1 && tierFree){
-        shortFee=fees[0]; useTier2=true;
-        r=actSetNum(xml,'AO5',shortFee); if(r.ok) xml=r.xml;
-      } else {
-        const detail=shortDays.map(function(w){ const q=computePay(w);
-          return normDate(w.date).slice(8)+': '+Math.round(q.feePct*100)+'% = '+Math.round(q.fee); }).join(' · ');
-        alert('בחודש הזה יש '+shortDays.length+' ימים מקוצרים ('+detail+').'+
-          String.fromCharCode(10,10)+(fees.length>1?'הם לא באותו סכום, ':'תעריף 2 כבר בשימוש, ')+
-          'אז לא סימנתי אותם אוטומטית — סמן להם תעריף בקובץ.');
-      }
+    /* ACT's sheet prices a row from one of three rate tiers (D -> AO4/AO5/AO6). That is exactly
+       the mechanism a month with more than one day-fee needs — a half day under §5.13, or a day
+       with its own rate override — so the distinct fees of the month are mapped onto the tiers
+       and every row is stamped with its own. The earlier version only wrote tier 2 when it
+       looked untouched, which meant a template carrying an old tier-2 value silently refused and
+       the owner had to fill it in by hand. Building from a clean template each time, that
+       caution bought nothing. */
+    const feeOf=function(w){ return +computePay(w).fee.toFixed(2); };
+    const tiers=[...new Set(days.map(feeOf))].filter(function(v){ return v>0; });
+    // the ordinary day fee first, so tier 1 stays the headline rate
+    const counts={}; days.forEach(function(w){ const k=feeOf(w); counts[k]=(counts[k]||0)+1; });
+    tiers.sort(function(a,b){ return (counts[b]-counts[a]) || (b-a); });
+    if(tiers.length>3){
+      alert('בחודש הזה יש '+tiers.length+' תעריפים שונים ('+tiers.join(' · ')+
+        '), ולמחשבון של אקט יש שלוש מדרגות בלבד.'+String.fromCharCode(10,10)+
+        'שלושת הנפוצים ימולאו; את השאר סמן ידנית.');
     }
+    const tierOf={}; tiers.slice(0,3).forEach(function(v,i){ tierOf[v]=i+1; });
+    const tierCells=['AO4','AO5','AO6'];
+    tiers.slice(0,3).forEach(function(v,i){ const rr=actSetNum(xml,tierCells[i],v); if(rr.ok) xml=rr.xml; });
 
     const rows=actDateRows(xml); const missing=[]; let filled=0;
     for(const w of days){
@@ -5589,7 +5601,7 @@ async function exportActCalc(projId, ym){
          J stays 1, and the night column lands on the same 4 hours — while H>0 holds. */
       if(en!=null){ const h=(en===0?1:en); r=actSetNum(xml,'H'+row,h); if(r.ok) xml=r.xml; }
       if(st!=null&&en!=null) filled++;
-      if(useTier2 && computePay(w).shortDay){ const rr=actSetNum(xml,'D'+row,2); if(rr.ok) xml=rr.xml; }
+      const tier=tierOf[feeOf(w)]; if(tier){ const rr=actSetNum(xml,'D'+row,tier); if(rr.ok) xml=rr.xml; }
       /* the hourly extras. ACT stores these as day fractions, and their shekel columns V (Shabbat)
          and AL (misc) are manual inputs with no formula behind them, so both are written. */
       const p=computePay(w), hrs=function(v){ return (+v||0)>0 ? (+v)/24 : null; };
@@ -5611,13 +5623,13 @@ async function exportActCalc(projId, ym){
     const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download=name;
     document.body.appendChild(a); a.click(); a.remove();
     setTimeout(function(){ URL.revokeObjectURL(a.href); }, 4000);
-    alert('נוצר: '+name+'\n\n'+(useTier2?'ימים מקוצרים סומנו כתעריף 2 = '+fmtMoney(shortFee)+String.fromCharCode(10):'')+filled+' ימים עם שעות מלאות'+(noTimes.length?' · '+noTimes.length+' ללא שעות (יופיעו כ-0)':'')+
+    alert('נוצר: '+name+'\n\n'+(tiers.length>1?('תעריפים: '+tiers.slice(0,3).map(function(v,ix){return (ix+1)+' = '+fmtMoney(v);}).join(' · ')+String.fromCharCode(10)):'')+filled+' ימים עם שעות מלאות'+(noTimes.length?' · '+noTimes.length+' ללא שעות (יופיעו כ-0)':'')+
           '\nאורך יום: '+base+' ש\' · תעריף: '+fmtMoney(rate));
   }catch(e){ alert('הייצוא נכשל: '+e.message); }
 }
 
 /* ---------- version + auto-update (keeps the installed PWA in sync with the site) ---------- */
-const APP_VERSION='2026.09.01.4';
+const APP_VERSION='2026.09.01.5';
 function setVersionLabels(){
   const a=document.getElementById('appVer'); if(a) a.textContent=APP_VERSION;
   const b=document.getElementById('appVerSettings'); if(b) b.textContent=APP_VERSION;
