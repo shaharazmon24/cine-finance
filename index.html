@@ -2408,15 +2408,24 @@ function computePay(wd){
   const travelUnits = isSat ? (tr1+tr15*1.5+tr2*2)/2 : isFri ? (tr1+tr15*1.5+tr2*2) : (tr1+tr15*1.5);
   const travelHrsPay = travelUnits>0 ? hourly*travelUnits : 0;
 
+  /* ACT §5.13 — a short day is a graded fraction of the fee, not a full one: 0-4h 50%,
+     4-5h 60%, 5-6h 70%, 6h and over 100%. Without this a 5.25-hour day was billed as a whole
+     day. Applies only once times exist, so a day still waiting for its hours is untouched. */
+  const halfPct = (worked>0 && worked<6)
+    ? (worked<4?0.5 : worked<5?0.6 : 0.7) : 1;
+  const shortDay = halfPct<1 && !(c && c.noHalfDay===true);
+  const feePct = shortDay?halfPct:1;
+  const fee = rate*feePct;
+
   const gear=+wd.gearRental||0, travel=+wd.travel||0, other=+wd.otherAdd||0;
-  const agreed = rate + otPay + nightPay + restPayAmt + shabPay + mealPay + travelHrsPay
+  const agreed = fee + otPay + nightPay + restPayAmt + shabPay + mealPay + travelHrsPay
                + gear + travel + other;   // the figure actually agreed with the client
   const {sub, vat} = splitVat(agreed, vatMode, s.vat);
   return {
     rate, vatMode, plusVat: vatMode==='plus', baseHours, hourly, worked, otHours, otModel, otMult,
     otPay, gear, travel, other, agreed, sub, vat, total:sub+vat,
     nightHrs, nightPay, restShort, restPay:restPayAmt,
-    isSat, shabHrs, shabPay, lateLunch, shortLunch, mealPay,
+    isSat, shabHrs, shabPay, lateLunch, shortLunch, mealPay, fee, feePct, shortDay,
     travelH:{t1:tr1,t15:tr15,t2:tr2}, travelHrsPay,
     otBands: otModel==='bands'?otBandsOf(wd,c):[],
     otBandsMissing: otModel==='bands' && otBandsOf(wd,c).length===0,
@@ -2903,6 +2912,7 @@ function renderWdPreview(){
   const p=computePay(Object.assign({}, stored, readWdForm()));
   const f=n=>Math.round(n).toLocaleString('he-IL')+' ₪';
   let lines=`<div class="ln"><span>תעריף יום הבסיס</span><span class="num">${f(p.rate)}</span></div>`;
+  if(p.shortDay) lines+=`<div class="ln"><span style="color:var(--accent)">יום מקוצר — ${Math.round(p.feePct*100)}% לפי אקט §5.13 (${(+p.worked).toFixed(2).replace(/\.?0+$/,'')} ש')</span><span class="num">${f(p.fee)}</span></div>`;
   // which base-day length priced this — a missing contract value silently fell back to Settings
   lines+=`<div class="ln"><span class="faint">יום בסיס ${(+p.baseHours).toFixed(2).replace(/\.?0+$/,'')} ש' · שעה = ${f(p.hourly)}</span><span></span></div>`;
   if(p.friBaseApplied) lines+=`<div class="ln"><span class="faint">יום שישי — יום בסיס מקוצר ל-${(+p.baseHours).toFixed(2).replace(/\.?0+$/,'')} ש' לפי החוזה</span><span></span></div>`;
@@ -5547,14 +5557,39 @@ async function exportActCalc(projId, ym){
     let r=actSetNum(xml,'AL2',base); if(!r.ok){ alert('אורך יום: '+r.why); return; } xml=r.xml;
     if(rate){ r=actSetNum(xml,'AO4',rate); if(!r.ok){ alert('תעריף יומי: '+r.why); return; } xml=r.xml; }
 
+    /* ACT's sheet has no half-day field — its own AN only knows "no end time = half". A short
+       day is expressed the way the owner already does it by hand: rate tier 2 with its own fee.
+       Only done when every short day in the month shares one fee and tier 2 is still untouched,
+       otherwise the export says so rather than overwriting a tier that means something else. */
+    const shortDays=days.filter(function(w){ return computePay(w).shortDay; });
+    let shortFee=null, useTier2=false;
+    if(shortDays.length){
+      const fees=[...new Set(shortDays.map(function(w){ return +computePay(w).fee.toFixed(2); }))];
+      const tierFree=xml.indexOf('<v>1500</v>')>=0 && /<c r="AO5"[^>]*>[\s\S]{0,40}?1500/.test(xml);
+      if(fees.length===1 && tierFree){
+        shortFee=fees[0]; useTier2=true;
+        r=actSetNum(xml,'AO5',shortFee); if(r.ok) xml=r.xml;
+      } else {
+        const detail=shortDays.map(function(w){ const q=computePay(w);
+          return normDate(w.date).slice(8)+': '+Math.round(q.feePct*100)+'% = '+Math.round(q.fee); }).join(' · ');
+        alert('בחודש הזה יש '+shortDays.length+' ימים מקוצרים ('+detail+').'+
+          String.fromCharCode(10,10)+(fees.length>1?'הם לא באותו סכום, ':'תעריף 2 כבר בשימוש, ')+
+          'אז לא סימנתי אותם אוטומטית — סמן להם תעריף בקובץ.');
+      }
+    }
+
     const rows=actDateRows(xml); const missing=[]; let filled=0;
     for(const w of days){
       const row=rows[actSerial(w.date)];
       if(!row){ missing.push(normDate(w.date)); continue; }
       const st=actTimeFrac(w.startTime), en=actTimeFrac(w.endTime);
       if(st!=null){ r=actSetNum(xml,'F'+row,st); if(r.ok) xml=r.xml; }
-      if(en!=null){ r=actSetNum(xml,'H'+row,en); if(r.ok) xml=r.xml; }
+      /* A finish at 00:00 is 0, and ACT's AN reads a zero H as "no end time" and pays half a
+         day. Written as 1.0 (24:00) every downstream formula agrees — I=1 is past the start so
+         J stays 1, and the night column lands on the same 4 hours — while H>0 holds. */
+      if(en!=null){ const h=(en===0?1:en); r=actSetNum(xml,'H'+row,h); if(r.ok) xml=r.xml; }
       if(st!=null&&en!=null) filled++;
+      if(useTier2 && computePay(w).shortDay){ const rr=actSetNum(xml,'D'+row,2); if(rr.ok) xml=rr.xml; }
       /* the hourly extras. ACT stores these as day fractions, and their shekel columns V (Shabbat)
          and AL (misc) are manual inputs with no formula behind them, so both are written. */
       const p=computePay(w), hrs=function(v){ return (+v||0)>0 ? (+v)/24 : null; };
@@ -5576,13 +5611,13 @@ async function exportActCalc(projId, ym){
     const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download=name;
     document.body.appendChild(a); a.click(); a.remove();
     setTimeout(function(){ URL.revokeObjectURL(a.href); }, 4000);
-    alert('נוצר: '+name+'\n\n'+filled+' ימים עם שעות מלאות'+(noTimes.length?' · '+noTimes.length+' ללא שעות (יופיעו כ-0)':'')+
+    alert('נוצר: '+name+'\n\n'+(useTier2?'ימים מקוצרים סומנו כתעריף 2 = '+fmtMoney(shortFee)+String.fromCharCode(10):'')+filled+' ימים עם שעות מלאות'+(noTimes.length?' · '+noTimes.length+' ללא שעות (יופיעו כ-0)':'')+
           '\nאורך יום: '+base+' ש\' · תעריף: '+fmtMoney(rate));
   }catch(e){ alert('הייצוא נכשל: '+e.message); }
 }
 
 /* ---------- version + auto-update (keeps the installed PWA in sync with the site) ---------- */
-const APP_VERSION='2026.09.01.3';
+const APP_VERSION='2026.09.01.4';
 function setVersionLabels(){
   const a=document.getElementById('appVer'); if(a) a.textContent=APP_VERSION;
   const b=document.getElementById('appVerSettings'); if(b) b.textContent=APP_VERSION;
