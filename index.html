@@ -2223,6 +2223,88 @@ function splitVat(amount, mode, vatPct){
   return {sub:amount, vat:amount*r};
 }
 
+
+/* ---- Night work and insufficient rest -----------------------------------------------------
+   Ported one-for-one from ACT's own calculator, whose formulas are the thing the owner actually
+   invoices against. Until now computePay knew only base pay + overtime, so it reported LESS than
+   the document he sends: a 15h day priced 3,300 here came out 3,368.57 there (night), and the
+   10.5h day after it priced 1,800 here came out 1,971.43 there (rest violation).
+
+   ACT weekday row:
+     AH = IF(G<5/24, IF(I>5/24, 5/24-G, I-G), 0)
+        + IF(I>20/24, I-20/24, IF(I<G, I+IF(G>20/24, 1-G, 4/24), 0))
+     AK = hourly * 0.2 * AH*24
+     W  = IF(G>I_prev, IF(G_prev>I_prev, G-I_prev), 1+(G-I_prev))     ← the empty ELSE is ACT's
+     X  = IF(W < 11/24, 11/24-W, 0)          (Friday: 10/24)
+     Z  = cumulative ladder over the shortfall: 1 · 1.25 · 1.5 · 2.5 · then 5 per hour
+   Friday also weights the evening/after-midnight portion double (AJ*48 rather than *24). */
+
+function hhmmFrac(t){ const m=/^(\d{1,2}):(\d{2})$/.exec(String(t||'').trim());
+  return m ? (+m[1]+(+m[2])/60)/24 : null; }
+
+/* night hours, split the way ACT splits them: before 05:00, and from 20:00 onward */
+function nightParts(startHHMM, endHHMM){
+  const g=hhmmFrac(startHHMM), i=hhmmFrac(endHHMM);
+  if(g==null || i==null) return {morning:0, evening:0};
+  let morning=0;
+  if(g < 5/24) morning = (i > 5/24) ? (5/24 - g) : (i - g);
+  let evening=0;
+  if(i > 20/24) evening = i - 20/24;
+  else if(i < g) evening = i + (g > 20/24 ? (1-g) : 4/24);
+  return {morning:Math.max(0,morning), evening:Math.max(0,evening)};
+}
+
+/* the previous calendar day's shift, used for the rest gap. Cached against the raw stored
+   string so this stays cheap when every row on a page calls computePay. */
+let _restCache={key:null,map:null};
+function _shiftsByDate(){
+  let raw='[]'; try{ raw=localStorage.getItem(LS.workdays)||'[]'; }catch(e){}
+  if(_restCache.key===raw) return _restCache.map;
+  const map={};
+  try{ (JSON.parse(raw)||[]).forEach(function(w){
+    const d=normDate(w.date); if(d && w.endTime) map[d]=w; }); }catch(e){}
+  _restCache={key:raw, map:map};
+  return map;
+}
+function prevDayShift(wd){
+  const d=normDate(wd&&wd.date); if(!d) return null;
+  const p=new Date(d+'T00:00:00'); p.setDate(p.getDate()-1);
+  const key=p.getFullYear()+'-'+String(p.getMonth()+1).padStart(2,'0')+'-'+String(p.getDate()).padStart(2,'0');
+  const prev=_shiftsByDate()[key];
+  return (prev && prev.id!==(wd&&wd.id)) ? prev : null;
+}
+/* hours of rest short of the statutory minimum before this day started */
+function restShortfallHours(wd, isFri){
+  const prev=prevDayShift(wd); if(!prev) return 0;
+  const g=hhmmFrac(wd.startTime), iPrev=hhmmFrac(prev.endTime), gPrev=hhmmFrac(prev.startTime);
+  if(g==null || iPrev==null) return 0;
+  let gap;
+  if(g > iPrev){
+    // ACT's inner IF has no ELSE: when the previous day did NOT cross midnight this is simply
+    // not a back-to-back turnaround, and the cell yields FALSE — i.e. no violation.
+    if(gPrev!=null && gPrev > iPrev) gap = g - iPrev; else return 0;
+  } else {
+    gap = 1 + (g - iPrev);
+  }
+  const need = isFri ? 10/24 : 11/24;
+  return gap < need ? (need-gap)*24 : 0;
+}
+/* the shortfall is paid on a rising ladder, cumulative — not a flat multiple */
+function restPay(hourly, shortHours){
+  const x=+shortHours||0; if(x<=0) return 0;
+  if(x>4) return hourly*(1+1.25+1.5+2.5+5*(x-4));
+  if(x>3) return hourly*(1+1.25+1.5+2.5*(x-3));
+  if(x>2) return hourly*(1+1.25+1.5*(x-2));
+  if(x>1) return hourly*(1+1.25*(x-1));
+  return hourly*x;
+}
+/* Both premiums are ACT collective terms. They are ON unless a contract says otherwise, because
+   the calculator the owner actually invoices with applies them — but they are per-contract and
+   named in the pay breakdown, so a contract that does not grant them can be switched off and
+   the reason stays visible. */
+function paysNight(c){ return !(c && c.noNightPremium===true); }
+function paysRest(c){  return !(c && c.noRestPremium===true); }
+
 /* Core pay calculator → returns a full breakdown */
 function computePay(wd){
   const s=settings();
@@ -2239,12 +2321,20 @@ function computePay(wd){
      A day-level `baseDayHours` still wins, so a holiday eve can be set by hand. */
   const _d = normDate(wd.date) ? new Date(normDate(wd.date)+'T00:00:00') : null;
   const isFri = !!_d && _d.getDay()===5;
-  const friBase = (c && c.baseDayHoursFriEve!=null && c.baseDayHoursFriEve!=='') ? +c.baseDayHoursFriEve : null;
+  /* ACT makes Friday 1.5h shorter than the weekday for the same fee. A contract may state its
+     own figure; otherwise the ACT convention applies (11 -> 9.5, 10.5 -> 9), which is what the
+     calculator the owner invoices with does. */
+  const weekBase = (c&&c.baseDayHours)? +c.baseDayHours : (+s.baseHours||10);
+  const friBase = (c && c.baseDayHoursFriEve!=null && c.baseDayHoursFriEve!=='') ? +c.baseDayHoursFriEve
+                : (isFri ? Math.max(1, weekBase-1.5) : null);
   const baseHours = wd.baseDayHours ? +wd.baseDayHours
                   : (isFri && friBase>0) ? friBase
                   : ((c&&c.baseDayHours)? +c.baseDayHours : +s.baseHours||10);
   const hourly = baseHours>0?rate/baseHours:0;
-  const worked = +wd.hoursWorked||0;
+  /* Times are what ACT's document is built on, so they win when the hours field was never
+     filled — an AI-imported day carries a call time long before anyone types hours. */
+  const worked = (+wd.hoursWorked||0) ||
+    ((wd.startTime && wd.endTime) ? hoursBetween(wd.startTime, wd.endTime) : 0);
   const otHours = Math.max(0, worked-baseHours);
   const otModel = wd.overtimeModel || otModelOf(c);
   const otMult = (wd.overtimeMultiplier!=null && wd.overtimeMultiplier!=='') ? +wd.overtimeMultiplier : otMultOf(c);
@@ -2262,6 +2352,16 @@ function computePay(wd){
         const seg=Math.min(0.25, otEnd-t);
         const m = t<12?otTo12 : (t<13?ot12to13 : ot12to13 + otStep*(Math.floor(t-13)+1));
         otPay += seg*hourly*m;
+      }
+    } else if(isFri && !(c && Array.isArray(c.friOtBands) && c.friOtBands.length) && otModel!=='none'){
+      /* ACT's Friday ladder is materially steeper than the weekday one — 200/250/300/350/400/
+         450/500 against 125/150/200/250/300/350 — and pricing a Friday on the weekday ladder
+         under-reported it badly (a 12h Friday came out 1,800 here against 3,300 in ACT's sheet). */
+      const FRI=[2,2.5,3,3.5,4,4.5,5];
+      for(let t=baseHours; t<worked-1e-9; t+=0.25){
+        const seg=Math.min(0.25, worked-t);
+        const idx=Math.min(FRI.length-1, Math.floor(t-baseHours));
+        otPay += seg*hourly*FRI[idx];
       }
     } else if(otModel==='bands'){
       // the ladder written in THIS contract, integrated in quarter-hour steps like the ACT one
@@ -2281,15 +2381,26 @@ function computePay(wd){
       otPay = otHours*hourly*otMult;
     } // 'none' → otPay stays 0
   }
+  /* ACT also pays for night work and for a turnaround shorter than the statutory rest, both
+     derived from the same call/wrap times. Leaving them out made every such day under-report. */
+  const np=paysNight(c)?nightParts(wd.startTime, wd.endTime):{morning:0,evening:0};
+  const nightHrs=(np.morning+np.evening)*24;
+  // Friday weights the evening/after-midnight portion double, as in ACT's own sheet
+  const nightUnits=(np.morning*24)+(np.evening*24*(isFri?2:1));
+  const nightPay=nightUnits>0 ? hourly*0.2*nightUnits : 0;
+  const restShort=paysRest(c)?restShortfallHours(wd, isFri):0;
+  const restPayAmt=restPay(hourly, restShort);
+
   const gear=+wd.gearRental||0, travel=+wd.travel||0, other=+wd.otherAdd||0;
-  const agreed = rate + otPay + gear + travel + other;   // the figure actually agreed with the client
+  const agreed = rate + otPay + nightPay + restPayAmt + gear + travel + other;   // the figure actually agreed with the client
   const {sub, vat} = splitVat(agreed, vatMode, s.vat);
   return {
     rate, vatMode, plusVat: vatMode==='plus', baseHours, hourly, worked, otHours, otModel, otMult,
     otPay, gear, travel, other, agreed, sub, vat, total:sub+vat,
+    nightHrs, nightPay, restShort, restPay:restPayAmt,
     otBands: otModel==='bands'?otBandsOf(wd,c):[],
     otBandsMissing: otModel==='bands' && otBandsOf(wd,c).length===0,
-    isFri, friBaseApplied: isFri && friBase>0 && !wd.baseDayHours,
+    isFri, friBaseApplied: isFri && friBase>0 && !wd.baseDayHours, friLadder: isFri && otModel!=='none',
     contractName: c?c.name:null
   };
 }
@@ -2765,7 +2876,8 @@ function renderWdPreview(){
   lines+=`<div class="ln"><span class="faint">יום בסיס ${(+p.baseHours).toFixed(2).replace(/\.?0+$/,'')} ש' · שעה = ${f(p.hourly)}</span><span></span></div>`;
   if(p.friBaseApplied) lines+=`<div class="ln"><span class="faint">יום שישי — יום בסיס מקוצר ל-${(+p.baseHours).toFixed(2).replace(/\.?0+$/,'')} ש' לפי החוזה</span><span></span></div>`;
   if(p.otPay>0){
-    const otDesc = p.otModel==='bands'?'מדרגות החוזה'
+    const otDesc = p.friLadder?'מדרגות שישי — אקט'
+                 : p.otModel==='bands'?'מדרגות החוזה'
                  : p.otModel==='act'?'מדרגות אקט'
                  : (p.otModel==='flat'?`×${(+p.otMult).toFixed(2).replace(/\.?0+$/,'')} מהתעריף השעתי`:'ללא');
     lines+=`<div class="ln"><span>שעות נוספות (${(+p.otHours).toFixed(2).replace(/\.?0+$/,'')} ש' · ${otDesc})</span><span class="num">${f(p.otPay)}</span></div>`;
@@ -2777,6 +2889,8 @@ function renderWdPreview(){
     }
   }
   if(p.otBandsMissing && p.otHours>0) lines+=`<div class="ln"><span style="color:var(--bad)">לא הוגדרו מדרגות לחוזה — שעות נוספות לא חושבו</span><span></span></div>`;
+  if(p.nightPay>0) lines+=`<div class="ln"><span>עבודת לילה (${(+p.nightHrs).toFixed(2).replace(/\.?0+$/,'')} ש' · 20% לשעה${p.isFri?' · שישי, כפול':''})</span><span class="num">${f(p.nightPay)}</span></div>`;
+  if(p.restPay>0) lines+=`<div class="ln"><span>מנוחה מקוצרת (חסרות ${(+p.restShort).toFixed(2).replace(/\.?0+$/,'')} ש')</span><span class="num">${f(p.restPay)}</span></div>`;
   if(p.gear>0) lines+=`<div class="ln"><span>השכרת ציוד</span><span class="num">${f(p.gear)}</span></div>`;
   if(p.travel>0) lines+=`<div class="ln"><span>נסיעות</span><span class="num">${f(p.travel)}</span></div>`;
   if(p.other>0) lines+=`<div class="ln"><span>תוספת אחרת</span><span class="num">${f(p.other)}</span></div>`;
@@ -5426,7 +5540,7 @@ async function exportActCalc(projId, ym){
 }
 
 /* ---------- version + auto-update (keeps the installed PWA in sync with the site) ---------- */
-const APP_VERSION='2026.09.01.1';
+const APP_VERSION='2026.09.01.2';
 function setVersionLabels(){
   const a=document.getElementById('appVer'); if(a) a.textContent=APP_VERSION;
   const b=document.getElementById('appVerSettings'); if(b) b.textContent=APP_VERSION;
