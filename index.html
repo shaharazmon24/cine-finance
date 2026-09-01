@@ -2391,13 +2391,33 @@ function computePay(wd){
   const restShort=paysRest(c)?restShortfallHours(wd, isFri):0;
   const restPayAmt=restPay(hourly, restShort);
 
+  /* The rest of what ACT's sheet pays, ported cell for cell. All of these are manual entries
+     there too — the sheet has no way to know a lunch was cut short or a driving hour happened.
+     Multipliers and the day-type differences are ACT's own:
+       AC = hourly*(shortLunch*2 + lateLunch)*24      meal penalties
+       AG = hourly*(t1 + t1.5*1.5)*24                 travel, weekday  (their AF x2 term is
+            hourly*(t1 + t1.5*1.5 + t2*2)*24          Friday             absent on weekday rows,
+            hourly*(t1 + t1.5*1.5 + t2*2)/2*24        Saturday, halved   so the x2 field is
+       V  = hourly*shabbatHours*24                    Shabbat premium    offered only Fri/Sat) */
+  const isSat = !!_d && _d.getDay()===6;
+  const shabHrs=+wd.shabbatHours||0;
+  const shabPay=shabHrs>0 ? hourly*shabHrs : 0;
+  const lateLunch=+wd.lateLunch||0, shortLunch=+wd.shortLunch||0;
+  const mealPay=(lateLunch||shortLunch) ? hourly*(shortLunch*2+lateLunch) : 0;
+  const tr1=+wd.travelH1||0, tr15=+wd.travelH15||0, tr2=+wd.travelH2||0;
+  const travelUnits = isSat ? (tr1+tr15*1.5+tr2*2)/2 : isFri ? (tr1+tr15*1.5+tr2*2) : (tr1+tr15*1.5);
+  const travelHrsPay = travelUnits>0 ? hourly*travelUnits : 0;
+
   const gear=+wd.gearRental||0, travel=+wd.travel||0, other=+wd.otherAdd||0;
-  const agreed = rate + otPay + nightPay + restPayAmt + gear + travel + other;   // the figure actually agreed with the client
+  const agreed = rate + otPay + nightPay + restPayAmt + shabPay + mealPay + travelHrsPay
+               + gear + travel + other;   // the figure actually agreed with the client
   const {sub, vat} = splitVat(agreed, vatMode, s.vat);
   return {
     rate, vatMode, plusVat: vatMode==='plus', baseHours, hourly, worked, otHours, otModel, otMult,
     otPay, gear, travel, other, agreed, sub, vat, total:sub+vat,
     nightHrs, nightPay, restShort, restPay:restPayAmt,
+    isSat, shabHrs, shabPay, lateLunch, shortLunch, mealPay,
+    travelH:{t1:tr1,t15:tr15,t2:tr2}, travelHrsPay,
     otBands: otModel==='bands'?otBandsOf(wd,c):[],
     otBandsMissing: otModel==='bands' && otBandsOf(wd,c).length===0,
     isFri, friBaseApplied: isFri && friBase>0 && !wd.baseDayHours, friLadder: isFri && otModel!=='none',
@@ -2778,6 +2798,15 @@ function openWorkday(id, presetDate, presetProjectId){
       <label class="fld">טבעת נסיעה (אקט)<select id="wd_ring" onchange="onWdRingChange()">${ACT_TRAVEL_RINGS.map(([k,l,amt])=>`<option value="${k}" ${ (w.ring||'')===k?'selected':''}>${l}${amt!=null&&amt>0?' · '+amt+' ₪':''}</option>`).join('')}</select></label>
       <label class="fld">נסיעות ₪<input type="number" id="wd_travel" value="${w.travel!=null?esc(w.travel):''}" oninput="renderWdPreview()"></label>
       <label class="fld">תוספת אחרת ₪<input type="number" id="wd_other" value="${w.otherAdd!=null?esc(w.otherAdd):''}" oninput="renderWdPreview()"></label>
+    </div>
+    <div class="faint" style="font-size:12px;margin:14px 0 6px">תוספות שעתיות — בדיוק כמו במחשבון של אקט. משולמות לפי התעריף השעתי של היום.</div>
+    <div class="grid" style="grid-template-columns:1fr 1fr 1fr">
+      <label class="fld">שעות שבת<input type="number" step="0.25" id="wd_shab" value="${w.shabbatHours!=null?esc(w.shabbatHours):''}" placeholder="100% נוספים" oninput="renderWdPreview()"></label>
+      <label class="fld">איחור בהפסקה (ש')<input type="number" step="0.25" id="wd_lateL" value="${w.lateLunch!=null?esc(w.lateLunch):''}" placeholder="×1" oninput="renderWdPreview()"></label>
+      <label class="fld">קיצור הפסקה (ש')<input type="number" step="0.25" id="wd_shortL" value="${w.shortLunch!=null?esc(w.shortLunch):''}" placeholder="×2" oninput="renderWdPreview()"></label>
+      <label class="fld">שעות נסיעה ×1<input type="number" step="0.25" id="wd_tr1" value="${w.travelH1!=null?esc(w.travelH1):''}" oninput="renderWdPreview()"></label>
+      <label class="fld">שעות נסיעה ×1.5<input type="number" step="0.25" id="wd_tr15" value="${w.travelH15!=null?esc(w.travelH15):''}" oninput="renderWdPreview()"></label>
+      <label class="fld">שעות נסיעה ×2<input type="number" step="0.25" id="wd_tr2" value="${w.travelH2!=null?esc(w.travelH2):''}" placeholder="שישי/שבת" title="במחשבון של אקט העמודה הזו נספרת בשישי ובשבת בלבד" oninput="renderWdPreview()"></label>
       <label class="fld">סטטוס תשלום<select id="wd_status">${stOpts}</select></label>
     </div>
     <label class="fld" style="margin-top:12px"><span class="row" style="gap:8px">
@@ -2854,6 +2883,8 @@ function readWdForm(){
     client:v('wd_client'), role:v('wd_role'),
     dayRate:num('wd_rate'), startTime:v('wd_start')||null, endTime:v('wd_end')||null, hoursWorked:num('wd_hours'),
     gearRental:num('wd_gear'), ring:v('wd_ring')||null, travel:num('wd_travel'), otherAdd:num('wd_other'),
+    shabbatHours:num('wd_shab'), lateLunch:num('wd_lateL'), shortLunch:num('wd_shortL'),
+    travelH1:num('wd_tr1'), travelH15:num('wd_tr15'), travelH2:num('wd_tr2'),
     // '' = inherit from the contract. Storing null instead of a concrete mode is what lets a
     // later correction to the contract still reach days already saved; the old form always
     // stamped a mode, permanently freezing every day it touched.
@@ -2891,6 +2922,9 @@ function renderWdPreview(){
   if(p.otBandsMissing && p.otHours>0) lines+=`<div class="ln"><span style="color:var(--bad)">לא הוגדרו מדרגות לחוזה — שעות נוספות לא חושבו</span><span></span></div>`;
   if(p.nightPay>0) lines+=`<div class="ln"><span>עבודת לילה (${(+p.nightHrs).toFixed(2).replace(/\.?0+$/,'')} ש' · 20% לשעה${p.isFri?' · שישי, כפול':''})</span><span class="num">${f(p.nightPay)}</span></div>`;
   if(p.restPay>0) lines+=`<div class="ln"><span>מנוחה מקוצרת (חסרות ${(+p.restShort).toFixed(2).replace(/\.?0+$/,'')} ש')</span><span class="num">${f(p.restPay)}</span></div>`;
+  if(p.shabPay>0) lines+=`<div class="ln"><span>שעות שבת (${(+p.shabHrs).toFixed(2).replace(/\.?0+$/,'')} ש' · 100% נוספים)</span><span class="num">${f(p.shabPay)}</span></div>`;
+  if(p.mealPay>0){ const bits=[]; if(p.lateLunch) bits.push("איחור "+p.lateLunch+" ש"); if(p.shortLunch) bits.push("קיצור "+p.shortLunch+" ש ×2"); lines+=`<div class="ln"><span>הפסקות (${bits.join(" · ")})</span><span class="num">${f(p.mealPay)}</span></div>`; }
+  if(p.travelHrsPay>0) lines+=`<div class="ln"><span>שעות נסיעה${p.isSat?' (שבת — חצי)':''}</span><span class="num">${f(p.travelHrsPay)}</span></div>`;
   if(p.gear>0) lines+=`<div class="ln"><span>השכרת ציוד</span><span class="num">${f(p.gear)}</span></div>`;
   if(p.travel>0) lines+=`<div class="ln"><span>נסיעות</span><span class="num">${f(p.travel)}</span></div>`;
   if(p.other>0) lines+=`<div class="ln"><span>תוספת אחרת</span><span class="num">${f(p.other)}</span></div>`;
@@ -5521,6 +5555,14 @@ async function exportActCalc(projId, ym){
       if(st!=null){ r=actSetNum(xml,'F'+row,st); if(r.ok) xml=r.xml; }
       if(en!=null){ r=actSetNum(xml,'H'+row,en); if(r.ok) xml=r.xml; }
       if(st!=null&&en!=null) filled++;
+      /* the hourly extras. ACT stores these as day fractions, and their shekel columns V (Shabbat)
+         and AL (misc) are manual inputs with no formula behind them, so both are written. */
+      const p=computePay(w), hrs=function(v){ return (+v||0)>0 ? (+v)/24 : null; };
+      const ex=[['U',hrs(w.shabbatHours)],['V',p.shabPay>0?p.shabPay:null],
+                ['AA',hrs(w.lateLunch)],['AB',hrs(w.shortLunch)],
+                ['AD',hrs(w.travelH1)],['AE',hrs(w.travelH15)],['AF',hrs(w.travelH2)],
+                ['AL',(+w.otherAdd||0)>0?+w.otherAdd:null]];
+      for(const pair of ex){ if(pair[1]==null) continue; const rr=actSetNum(xml,pair[0]+row,pair[1]); if(rr.ok) xml=rr.xml; }
     }
     if(missing.length) alert('התאריכים הבאים לא נמצאו בגיליון ולא מולאו:\n'+missing.join(', '));
 
@@ -5540,7 +5582,7 @@ async function exportActCalc(projId, ym){
 }
 
 /* ---------- version + auto-update (keeps the installed PWA in sync with the site) ---------- */
-const APP_VERSION='2026.09.01.2';
+const APP_VERSION='2026.09.01.3';
 function setVersionLabels(){
   const a=document.getElementById('appVer'); if(a) a.textContent=APP_VERSION;
   const b=document.getElementById('appVerSettings'); if(b) b.textContent=APP_VERSION;
