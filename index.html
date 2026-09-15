@@ -1855,13 +1855,13 @@ function confirmSchedule(){
       const old=target.get(i);
       if(old){
         const wi=list.findIndex(w=>w.id===old.id);
-        if(wi>=0){ list[wi].date=normDate(it.date); if(it.callTime) list[wi].startTime=it.callTime; updated++; }
+        if(wi>=0){ list[wi].date=normDate(it.date); if(it.callTime) list[wi].startTime=snapQuarterTime(it.callTime); updated++; }
       } else {
         const note=[it.location?('מיקום: '+it.location):'',it.notes||''].filter(Boolean).join(' · ');
         // honour the same tentative default as a normal import — a callsheet is a plan,
         // not confirmed income, and booking it as confirmed inflates the tax set-aside
         list.push({id:uid(),projectId:_schedUpdateProjId,date:normDate(it.date),
-          role:_schedRole||'',startTime:it.callTime||null,status:'unissued',tentative:_schedTentative!==false,notes:note,createdAt:Date.now()});
+          role:_schedRole||'',startTime:it.callTime?snapQuarterTime(it.callTime):null,status:'unissued',tentative:_schedTentative!==false,notes:actCallNote(it.callTime)+note,createdAt:Date.now()});
         created++;
       }
     });
@@ -1884,7 +1884,7 @@ function confirmSchedule(){
     list.push({
       id:uid(), date:normDate(it.date), projectId, contractId,
       client:(projectId?'':(it.production||'')), role:role||it.role||'',
-      startTime:it.callTime||null, status:'unissued', tentative, notes:note, createdAt:Date.now()
+      startTime:it.callTime?snapQuarterTime(it.callTime):null, status:'unissued', tentative, notes:actCallNote(it.callTime)+note, createdAt:Date.now()
     });
   }
   save(LS.workdays,list);
@@ -2829,8 +2829,8 @@ function openWorkday(id, presetDate, presetProjectId){
       <label class="fld">תפקיד<input type="text" id="wd_role" value="${esc(w.role||'')}" placeholder="${_effRole?esc(_effRole)+' (מהחוזה)':'צלם / מפעיל...'}"></label>
       <label class="fld">לקוח / הפקה (אם שונה)<input type="text" id="wd_client" value="${esc(w.client||'')}" placeholder="${_effClient?esc(_effClient)+' (מהפרויקט)':'ברירת מחדל מהפרויקט'}"></label>
       <label class="fld">תעריף יומי ₪<input type="number" id="wd_rate" value="${w.dayRate!=null?esc(w.dayRate):''}" oninput="renderWdPreview()" placeholder="${_effRate!==''?_effRate+' (מהחוזה)':'מהחוזה אם ריק'}"></label>
-      <label class="fld">שעת התחלה<input type="time" id="wd_start" value="${esc(w.startTime||'')}" oninput="onWdTimeChange()"></label>
-      <label class="fld">שעת סיום<input type="time" id="wd_end" value="${esc(w.endTime||'')}" oninput="onWdTimeChange()"></label>
+      <label class="fld">שעת התחלה<input type="time" id="wd_start" step="900" value="${esc(w.startTime||'')}" oninput="onWdTimeChange()"></label>
+      <label class="fld">שעת סיום<input type="time" id="wd_end" step="900" value="${esc(w.endTime||'')}" oninput="onWdTimeChange()"></label>
       <label class="fld">סה"כ שעות<input type="number" id="wd_hours" step="0.25" value="${w.hoursWorked!=null?esc(w.hoursWorked):''}" oninput="renderWdPreview()" placeholder="אוטומטי מהשעות"></label>
       <label class="fld">השכרת ציוד ₪<input type="number" id="wd_gear" value="${w.gearRental!=null?esc(w.gearRental):''}" oninput="renderWdPreview()"></label>
       <label class="fld">טבעת נסיעה (אקט)<select id="wd_ring" onchange="onWdRingChange()">${ACT_TRAVEL_RINGS.map(([k,l,amt])=>`<option value="${k}" ${ (w.ring||'')===k?'selected':''}>${l}${amt!=null&&amt>0?' · '+amt+' ₪':''}</option>`).join('')}</select></label>
@@ -2846,11 +2846,11 @@ function openWorkday(id, presetDate, presetProjectId){
           <option value="graded" ${w.dayType==='graded'?'selected':''}>מקוצר לפי §5.13 — 0–4 ש' 50% · 4–5 60% · 5–6 70%</option>
         </select></label>
       <label class="fld">שעות שבת<input type="number" step="0.25" id="wd_shab" value="${w.shabbatHours!=null?esc(w.shabbatHours):''}" placeholder="100% נוספים" oninput="renderWdPreview()"></label>
-      <label class="fld">איחור בהפסקה (ש')<input type="number" step="0.25" id="wd_lateL" value="${w.lateLunch!=null?esc(w.lateLunch):''}" placeholder="×1" oninput="renderWdPreview()"></label>
-      <label class="fld">קיצור הפסקה (ש')<input type="number" step="0.25" id="wd_shortL" value="${w.shortLunch!=null?esc(w.shortLunch):''}" placeholder="×2" oninput="renderWdPreview()"></label>
-      <label class="fld">שעות נסיעה ×1<input type="number" step="0.25" id="wd_tr1" value="${w.travelH1!=null?esc(w.travelH1):''}" oninput="renderWdPreview()"></label>
-      <label class="fld">שעות נסיעה ×1.5<input type="number" step="0.25" id="wd_tr15" value="${w.travelH15!=null?esc(w.travelH15):''}" oninput="renderWdPreview()"></label>
-      <label class="fld">שעות נסיעה ×2<input type="number" step="0.25" id="wd_tr2" value="${w.travelH2!=null?esc(w.travelH2):''}" placeholder="שישי/שבת" title="במחשבון של אקט העמודה הזו נספרת בשישי ובשבת בלבד" oninput="renderWdPreview()"></label>
+      <label class="fld">איחור בהפסקה (ש')<input type="number" step="0.25" id="wd_lateL" min="0" max="12" value="${w.lateLunch!=null?esc(w.lateLunch):''}" placeholder="×1" oninput="renderWdPreview()"></label>
+      <label class="fld">קיצור הפסקה (ש')<input type="number" step="0.25" id="wd_shortL" min="0" max="1" value="${w.shortLunch!=null?esc(w.shortLunch):''}" placeholder="×2" oninput="renderWdPreview()"></label>
+      <label class="fld">שעות נסיעה ×1<input type="number" step="0.25" id="wd_tr1" min="0" max="12" value="${w.travelH1!=null?esc(w.travelH1):''}" oninput="renderWdPreview()"></label>
+      <label class="fld">שעות נסיעה ×1.5<input type="number" step="0.25" id="wd_tr15" min="0" max="12" value="${w.travelH15!=null?esc(w.travelH15):''}" oninput="renderWdPreview()"></label>
+      <label class="fld">שעות נסיעה ×2<input type="number" step="0.25" id="wd_tr2" min="0" max="12" value="${w.travelH2!=null?esc(w.travelH2):''}" placeholder="שישי/שבת" title="במחשבון של אקט העמודה הזו נספרת בשישי ובשבת בלבד" oninput="renderWdPreview()"></label>
       <label class="fld">סטטוס תשלום<select id="wd_status">${stOpts}</select></label>
     </div>
     <label class="fld" style="margin-top:12px"><span class="row" style="gap:8px">
@@ -2901,6 +2901,22 @@ function onWdContractChange(){
   renderWdPreview();
 }
 /* total hours from start/end times (handles a shift that crosses midnight) */
+/* ACT's calculator accepts times only from its Day_Times list — 00:00..24:00 in quarter hours
+   (data validation on F10:F51 / H10:H51, verified in the workbook). A time it will not accept
+   must not be enterable here either, or the app and the document drift apart. */
+function isQuarterTime(t){ const m=/^(\d{1,2}):(\d{2})$/.exec(String(t||'').trim()); return !!m && (+m[2])%15===0; }
+function snapQuarterTime(t){ const m=/^(\d{1,2}):(\d{2})$/.exec(String(t||'').trim()); if(!m) return t;
+  let mins=Math.round((+m[1]*60+ +m[2])/15)*15; if(mins>=1440) mins-=1440;
+  return String(Math.floor(mins/60)).padStart(2,'0')+':'+String(mins%60).padStart(2,'0'); }
+/* the hourly extras have their own lists: shortened lunch 0..1h, late lunch / travel 0..12h,
+   all in quarter-hour steps */
+function actExtrasProblem(d){
+  const chk=(v,max,label)=>{ if(v==null||v==='') return null; const n=+v;
+    if(!(n>=0)||Math.abs(n*4-Math.round(n*4))>1e-9) return label+': רק רבעי שעה (0.25 / 0.5 / 0.75)';
+    if(n>max) return label+': המחשבון מקבל עד '+max+' שעות'; return null; };
+  return chk(d.shortLunch,1,'קיצור הפסקה')||chk(d.lateLunch,12,'איחור בהפסקה')||chk(d.travelH1,12,'נסיעה ×1')||chk(d.travelH15,12,'נסיעה ×1.5')||chk(d.travelH2,12,'נסיעה ×2')||chk(d.shabbatHours,24,'שעות שבת')||null;
+}
+function actCallNote(t){ return (t && !isQuarterTime(t)) ? ('שעת CALL בקולשיט '+t+' — הוצמדה לרבע השעה של המחשבון. ') : ''; }
 function hoursBetween(s,e){
   if(!s||!e) return null;
   const [h1,m1]=s.split(':').map(Number), [h2,m2]=e.split(':').map(Number);
@@ -2997,6 +3013,10 @@ function closeWdModal(){
 }
 function saveWorkday(){
   const d=readWdForm();
+  for(const [t,l] of [[d.startTime,'שעת התחלה'],[d.endTime,'שעת סיום']]){
+    if(t && !isQuarterTime(t)){ alert(l+' '+t+' — המחשבון של אקט מקבל רק רבעי שעה (:00 / :15 / :30 / :45).'+String.fromCharCode(10)+'הקרוב: '+snapQuarterTime(t)); return; }
+  }
+  const xp=actExtrasProblem(d); if(xp){ alert(xp); return; }
   if(!d.date){ alert('יש לבחור תאריך.'); return; }
   const list=load(LS.workdays,[]);
   if(_editingWdId){ const i=list.findIndex(x=>x.id===_editingWdId); if(i>=0) d.id=_editingWdId, list[i]=Object.assign({},list[i],d); }
@@ -5511,8 +5531,8 @@ function actOpenHoursFill(projId, ym, onlyMissing){
       const dow=['א','ב','ג','ד','ה','ו','ש'][dt.getDay()];
       return '<div class="actfill-row" data-id="'+w.id+'">'+
         '<span class="af-d">'+d.slice(8)+'/'+d.slice(5,7)+' <span class="faint">'+dow+'</span></span>'+
-        '<input type="time" class="af-s" value="'+esc(w.startTime||'')+'" oninput="actFillRecalc(this)">'+
-        '<input type="time" class="af-e" value="'+esc(w.endTime||'')+'" oninput="actFillRecalc(this)">'+
+        '<input type="time" step="900" class="af-s" value="'+esc(w.startTime||'')+'" oninput="actFillRecalc(this)">'+
+        '<input type="time" step="900" class="af-e" value="'+esc(w.endTime||'')+'" oninput="actFillRecalc(this)">'+
         '<span class="af-h faint">'+((w.startTime&&w.endTime)?hoursBetween(w.startTime,w.endTime).toFixed(2):'—')+'</span>'+
       '</div>';
     }).join('')+
@@ -5537,6 +5557,11 @@ function actFillApplyAll(){
   if(!n) alert('אין שורות ריקות להחיל עליהן.');
 }
 function actFillSave(){
+  const badRows=[...document.querySelectorAll('#actFillBody .actfill-row')].filter(function(r){
+    const s=r.querySelector('.af-s').value, e=r.querySelector('.af-e').value;
+    return (s&&!isQuarterTime(s))||(e&&!isQuarterTime(e)); });
+  if(badRows.length){ alert('המחשבון של אקט מקבל רק רבעי שעה (:00 / :15 / :30 / :45). תקן את השורות: '+
+    badRows.map(function(r){ return r.querySelector('.af-d').textContent.trim().split(' ')[0]; }).join(', ')); return; }
   const list=load(LS.workdays,[]); let n=0;
   document.querySelectorAll('#actFillBody .actfill-row').forEach(function(r){
     const w=list.find(function(x){ return x.id===r.dataset.id; }); if(!w) return;
@@ -5565,6 +5590,9 @@ async function exportActCalc(projId, ym){
     const rate=(days[0].dayRate!=null?+days[0].dayRate:(c&&c.dayRate!=null?+c.dayRate:0))||0;
     const base=(c&&c.baseDayHours)?+c.baseDayHours:(+settings().baseHours||10);
 
+    const offGrid=days.filter(function(w){ return (w.startTime&&!isQuarterTime(w.startTime))||(w.endTime&&!isQuarterTime(w.endTime)); });
+    if(offGrid.length){ alert('המחשבון של אקט מקבל רק רבעי שעה, ובימים האלה יש שעה אחרת: '+
+      offGrid.map(function(w){ return normDate(w.date).slice(8)+' ('+(w.startTime||'')+'–'+(w.endTime||'')+')'; }).join(', ')+String.fromCharCode(10,10)+'תקן אותם (כפתור "שעות") ואז ייצא.'); return; }
     const noTimes=days.filter(function(w){ return actTimeFrac(w.startTime)==null||actTimeFrac(w.endTime)==null; });
     if(noTimes.length){
       const go=confirm('ב-'+noTimes.length+' מתוך '+days.length+' ימים חסרות שעות ('+noTimes.map(function(w){return normDate(w.date).slice(8);}).join(', ')+').\n\n'+
@@ -5655,7 +5683,7 @@ async function exportActCalc(projId, ym){
 }
 
 /* ---------- version + auto-update (keeps the installed PWA in sync with the site) ---------- */
-const APP_VERSION='2026.09.15.1';
+const APP_VERSION='2026.09.15.2';
 function setVersionLabels(){
   const a=document.getElementById('appVer'); if(a) a.textContent=APP_VERSION;
   const b=document.getElementById('appVerSettings'); if(b) b.textContent=APP_VERSION;
