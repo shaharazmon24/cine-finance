@@ -914,14 +914,14 @@ td[title="לחץ לשינוי סטטוס"]:hover .st{border-color:var(--accent-d
           <div class="card">
             <div class="row" style="justify-content:space-between">
               <h3 style="margin:0;font-weight:500">שעות עבודה ושעות נוספות</h3>
-              <span class="tag act">מדרגות אקט 2023</span>
+              <span class="tag act">מחשבון אקט</span>
             </div>
             <p class="muted" style="margin:8px 0 14px;font-size:13px;line-height:1.6">לפי הסכם אקט–איגוד המפיקים 2023 (§5): אורך יום 10 ש' (מ-1.1.2025). ש"נ מחושבות במדרגות — עד 12 ש' ×1.5, שעה 12–13 ×2.0, ומעבר ל-13 +50% לכל שעה. כל יום עבודה יורש את אורך היום מהחוזה המקושר אם הוגדר. ניתן לכוונן כאן לכל מפיק.</p>
             <div class="grid" style="grid-template-columns:1fr 1fr">
               <label class="fld">אורך יום בסיס (ש')<input type="number" id="setBase" step="0.5"></label>
-              <label class="fld">ש"נ עד 12 ש' ×<input type="number" id="setOtTo12" step="0.05"></label>
-              <label class="fld">שעה 12–13 ×<input type="number" id="setOt12to13" step="0.05"></label>
-              <label class="fld">מעבר ל-13 ש' (+/שעה)<input type="number" id="setOtStep" step="0.05"></label>
+              <label class="fld">נוסח 2023 בלבד · ש"נ עד 12 ש' ×<input type="number" id="setOtTo12" step="0.05"></label>
+              <label class="fld">נוסח 2023 בלבד · שעה 12–13 ×<input type="number" id="setOt12to13" step="0.05"></label>
+              <label class="fld">נוסח 2023 בלבד · מעבר ל-13 ש' (+/שעה)<input type="number" id="setOtStep" step="0.05"></label>
             </div>
             <div class="notice" style="margin-top:12px;font-size:12px">שישי/ערב חג (×120% ליום), שבת/חג (×2), לילה (+20%), והסלמת ש"נ לפי מספר הפעמים בהפקה — תלויים בהפקה הספציפית; הוסף אותם ידנית ב"תוספת אחרת" של היום הרלוונטי.</div>
           </div>
@@ -1590,7 +1590,7 @@ const EXTRACT_SYS = `אתה עוזר משפטי-פיננסי לצלם קולנו
  "currency": "₪ כברירת מחדל",
  "baseDayHours": מספר או null (אורך יום צילום סטנדרטי בשעות לפי החוזה — למשל 10 / 11 / 11.5 / 12. קריטי לחישוב שעות נוספות),
  "baseDayHoursFriEve": מספר או null (אורך יום בשישי/ערב חג),
- "overtimeModel": "bands | act | flat | none — **'bands' אם החוזה מפרט מדרגות משלו** (למשל 'שעה ראשונה 125%, שנייה 150%, שלישית 200%'), גם אם הן דומות לאקט. זו האפשרות הנכונה בכל פעם שכתובים בחוזה אחוזים לפי שעה. 'act' רק אם החוזה מפנה להסכם אקט מבלי לפרט מדרגות. 'flat' אם כל שעה נוספת = מכפיל קבוע אחד. 'none' אם אין תוספת. אם יש ספק בין bands ל-act — בחר bands ומלא otBands, כי מדרגות מפורשות בחוזה גוברות תמיד על טבלה כללית.",
+ "overtimeModel": "bands | act | act2023 | flat | none — **'bands' אם החוזה מפרט מדרגות משלו** (למשל 'שעה ראשונה 125%, שנייה 150%, שלישית 200%'), גם אם הן דומות לאקט. זו האפשרות הנכונה בכל פעם שכתובים בחוזה אחוזים לפי שעה. 'act' אם החוזה מפנה למחשבון אקט / להסכם אקט / להסכם 2008 מבלי לפרט מדרגות (זה סולם המחשבון: 125/150/200/250/300/350 לשעה). 'act2023' רק אם החוזה מצטט במפורש את נוסח הסכם 2023 (150% עד השעה ה-12, 200% לשעה ה-13, +50% לכל שעה נוספת). 'flat' אם כל שעה נוספת = מכפיל קבוע אחד. 'none' אם אין תוספת. אם יש ספק בין bands ל-act — בחר bands ומלא otBands, כי מדרגות מפורשות בחוזה גוברות תמיד על טבלה כללית.",
  "otBands": "מערך או null — חובה כאשר overtimeModel='bands'. כל איבר {\\"to\\": מספר או null, \\"mult\\": מספר}, כאשר 'to' הוא **שעת הסיום המוחלטת** של המדרגה מתחילת יום העבודה ו-'mult' הוא המכפיל (125% → 1.25). האיבר האחרון עם to=null הוא 'ומעלה'. דוגמה לחוזה עם יום בסיס 10.5 והמדרגות 10.5-11.5=125%, 11.5-12.5=150%, 12.5-13.5=200%, 13.5+=250%: [{\\"to\\":11.5,\\"mult\\":1.25},{\\"to\\":12.5,\\"mult\\":1.5},{\\"to\\":13.5,\\"mult\\":2},{\\"to\\":null,\\"mult\\":2.5}]",
  "overtimeMultiplier": מספר או null (למודל flat — המכפיל לשעה נוספת. אם כתוב 'שעה נוספת = 100% משעה' → 1.0 ; '125%' → 1.25 ; '150%' → 1.5),
  "totalContractDays": מספר או null (סה"כ ימי הצילום שהחוזה מדבר עליהם, אם מצוין — למשל 42),
@@ -1925,7 +1925,8 @@ function openReview(data){
         <select data-k="overtimeModel" onchange="reviewOtToggle()">
           <option value="bands" ${otmVal==='bands'?'selected':''}>מדרגות לפי החוזה הזה</option>
           <option value="flat" ${otmVal==='flat'?'selected':''}>מכפיל אחיד לכל שעה נוספת</option>
-          <option value="act" ${otmVal==='act'?'selected':''}>מדרגות אקט 2023</option>
+          <option value="act" ${otmVal==='act'?'selected':''}>מחשבון אקט — 125/150/200/250/300/350</option>
+          <option value="act2023" ${otmVal==='act2023'?'selected':''}>נוסח הסכם אקט 2023 — 150% עד 12 ש', 200%, +50%</option>
           <option value="none" ${otmVal==='none'?'selected':''}>ללא תוספת ש"נ</option>
         </select>
       </label>
@@ -2330,14 +2331,22 @@ function computePay(wd){
   const baseHours = wd.baseDayHours ? +wd.baseDayHours
                   : (isFri && friBase>0) ? friBase
                   : ((c&&c.baseDayHours)? +c.baseDayHours : +s.baseHours||10);
-  const worked = (+wd.hoursWorked||0) ||
-    ((wd.startTime && wd.endTime) ? hoursBetween(wd.startTime, wd.endTime) : 0);
+  /* Times are the source of truth, exactly as in ACT's sheet: when both exist they win over the
+     stored hours field (which the form fills from them, rounded to two decimals for display).
+     The hours field only prices a day that has no times at all. */
+  const worked = (wd.startTime && wd.endTime) ? hoursBetween(wd.startTime, wd.endTime)
+               : (+wd.hoursWorked||0);
   const autoPct = (worked>0 && worked<6)
     ? (worked<4?0.5 : worked<5?0.6 : 0.7) : 1;
-  const dayType = wd.dayType||'';           // '' = graded automatically by the hours worked
-  const feePct = dayType==='full' ? 1
-               : dayType==='half' ? 0.5     // a half day agreed as such, whatever the hours
-               : ((c && c.noHalfDay===true) ? 1 : autoPct);
+  /* ACT's calculator NEVER reduces the day fee by itself — AN is the full tier fee whenever both
+     times exist; a 4-hour day in an approved July-2025 month was paid in full, and a short day is
+     expressed by the crew member choosing a rate tier. So the default is the full fee, exactly as
+     the calculator does, and a reduction is an explicit choice on the day: 'half' = 50%,
+     'graded' = the §5.13 ladder by hours. Grading automatically under-billed that 4h day by 1,157. */
+  const dayType = wd.dayType||'';
+  const feePct = dayType==='half' ? 0.5
+               : dayType==='graded' ? autoPct
+               : 1;
   const shortDay = feePct<1;
   const fee = rate*feePct;
 
@@ -2354,12 +2363,25 @@ function computePay(wd){
   let otPay=0;
   if(otHours>0 && worked>0){
     if(otModel==='act'){
-      // ACT 2023 §5 bands (weekday, first-occurrence): base→12h ×1.5, 12→13h ×2.0, beyond 13h +0.5/hr,
-      // integrated in quarter-hour steps (§5.8).
+      /* The ladder ACT's OWN CALCULATOR applies (CalcDoco11, ver 2026.09; identical in the 2025.08
+         release and in a July-2025 month a production approved): each successive hour beyond the
+         day is 125% · 150% · 200% · 250% · 300% · 350%, billed as the exact fraction — no
+         quarter-hour rounding anywhere in its formulas. This is the הסכם 2008 ladder the single-day
+         contract points to ("overtime per הסכם 2008"), and the owner's contracts say outright that
+         the calculator is what sets the fee. The engine used to apply the 2023 master-agreement
+         text instead (150% to 12h, 200% 12-13h, +50%/h beyond, rounded up to the quarter) and came
+         out 265.91 ABOVE the calculator on a 14.75h day. That text ladder survives as 'act2023'
+         for a contract that genuinely states it. */
+      const LADDER=[1.25,1.5,2,2.5,3,3.5];
+      for(let t=baseHours; t<worked-1e-9; t+=0.25){
+        const seg=Math.min(0.25, worked-t);
+        const idx=Math.min(LADDER.length-1, Math.floor(t-baseHours+1e-9));
+        otPay += seg*hourly*LADDER[idx];
+      }
+    } else if(otModel==='act2023'){
+      // ACT 2023 §5 bands as written in the master agreement (weekday, first-occurrence):
+      // base→12h ×1.5, 12→13h ×2.0, beyond 13h +0.5/hr, in quarter-hours rounded up (§5.8).
       const otTo12=+s.otTo12||1.5, ot12to13=+s.ot12to13||2.0, otStep=+s.otBeyond13Step||0.5;
-      /* §5.8 bills overtime in quarter-hours ROUNDED UP. Wrap times are rarely on a quarter
-         (hoursBetween returns e.g. 14.33), so charging the exact fraction under-billed almost
-         every real day — a 07:00→21:20 day on a 10h base lost 127.50 before VAT. */
       const otEnd = baseHours + Math.ceil((worked-baseHours)*4 - 1e-9)/4;
       for(let t=baseHours; t<otEnd-1e-9; t+=0.25){
         const seg=Math.min(0.25, otEnd-t);
@@ -2819,9 +2841,9 @@ function openWorkday(id, presetDate, presetProjectId){
     <div class="grid" style="grid-template-columns:1fr 1fr 1fr">
       <label class="fld">אורך היום
         <select id="wd_daytype" onchange="renderWdPreview()">
-          <option value="" ${!w.dayType?'selected':''}>אוטומטי — לפי השעות (אקט §5.13)</option>
+          <option value="" ${!w.dayType||w.dayType==='full'?'selected':''}>יום מלא — כמו במחשבון</option>
           <option value="half" ${w.dayType==='half'?'selected':''}>חצי יום — 50%</option>
-          <option value="full" ${w.dayType==='full'?'selected':''}>יום מלא</option>
+          <option value="graded" ${w.dayType==='graded'?'selected':''}>מקוצר לפי §5.13 — 0–4 ש' 50% · 4–5 60% · 5–6 70%</option>
         </select></label>
       <label class="fld">שעות שבת<input type="number" step="0.25" id="wd_shab" value="${w.shabbatHours!=null?esc(w.shabbatHours):''}" placeholder="100% נוספים" oninput="renderWdPreview()"></label>
       <label class="fld">איחור בהפסקה (ש')<input type="number" step="0.25" id="wd_lateL" value="${w.lateLunch!=null?esc(w.lateLunch):''}" placeholder="×1" oninput="renderWdPreview()"></label>
@@ -2883,11 +2905,14 @@ function hoursBetween(s,e){
   if(!s||!e) return null;
   const [h1,m1]=s.split(':').map(Number), [h2,m2]=e.split(':').map(Number);
   let mins=(h2*60+m2)-(h1*60+m1); if(mins<0) mins+=1440;
-  return Math.round((mins/60)*100)/100;
+  /* Exact, never rounded: ACT's sheet works from the raw times, so 16h20m is 16.3333h there.
+     Rounding to 16.33 here dropped a third of a minute that, multiplied by 350%, cost 1.91 on
+     that day and something on every wrap time not on a quarter. Round for DISPLAY only. */
+  return mins/60;
 }
 function onWdTimeChange(){
   const h=hoursBetween(document.getElementById('wd_start').value, document.getElementById('wd_end').value);
-  if(h!=null) document.getElementById('wd_hours').value=h;
+  if(h!=null) document.getElementById('wd_hours').value=Math.round(h*100)/100;   // display only; pricing uses the exact times
   renderWdPreview();
 }
 function onWdRingChange(){
@@ -2925,14 +2950,15 @@ function renderWdPreview(){
   const p=computePay(Object.assign({}, stored, readWdForm()));
   const f=n=>Math.round(n).toLocaleString('he-IL')+' ₪';
   let lines=`<div class="ln"><span>תעריף יום הבסיס</span><span class="num">${f(p.rate)}</span></div>`;
-  if(p.shortDay) lines+=`<div class="ln"><span style="color:var(--accent)">${p.dayType==='half'?'חצי יום — 50%':'יום מקוצר — '+Math.round(p.feePct*100)+'% לפי אקט §5.13 ('+(+p.worked).toFixed(2).replace(/\.?0+$/,'')+" ש')"}</span><span class="num">${f(p.fee)}</span></div>`;
+  if(p.shortDay) lines+=`<div class="ln"><span style="color:var(--accent)">${p.dayType==='half'?'חצי יום — 50%':'יום מקוצר — '+Math.round(p.feePct*100)+'% לפי §5.13 ('+(+p.worked).toFixed(2).replace(/\.?0+$/,'')+" ש')"}</span><span class="num">${f(p.fee)}</span></div>`;
   // which base-day length priced this — a missing contract value silently fell back to Settings
   lines+=`<div class="ln"><span class="faint">יום בסיס ${(+p.baseHours).toFixed(2).replace(/\.?0+$/,'')} ש' · שעה = ${f(p.hourly)}</span><span></span></div>`;
   if(p.friBaseApplied) lines+=`<div class="ln"><span class="faint">יום שישי — יום בסיס מקוצר ל-${(+p.baseHours).toFixed(2).replace(/\.?0+$/,'')} ש' לפי החוזה</span><span></span></div>`;
   if(p.otPay>0){
     const otDesc = p.friLadder?'מדרגות שישי — אקט'
                  : p.otModel==='bands'?'מדרגות החוזה'
-                 : p.otModel==='act'?'מדרגות אקט'
+                 : p.otModel==='act'?'מחשבון אקט 125–350%'
+                 : p.otModel==='act2023'?'נוסח הסכם 2023'
                  : (p.otModel==='flat'?`×${(+p.otMult).toFixed(2).replace(/\.?0+$/,'')} מהתעריף השעתי`:'ללא');
     lines+=`<div class="ln"><span>שעות נוספות (${(+p.otHours).toFixed(2).replace(/\.?0+$/,'')} ש' · ${otDesc})</span><span class="num">${f(p.otPay)}</span></div>`;
     // show the ladder actually applied — the mispricing hid behind a label with no numbers
@@ -5629,7 +5655,7 @@ async function exportActCalc(projId, ym){
 }
 
 /* ---------- version + auto-update (keeps the installed PWA in sync with the site) ---------- */
-const APP_VERSION='2026.09.01.5';
+const APP_VERSION='2026.09.15.1';
 function setVersionLabels(){
   const a=document.getElementById('appVer'); if(a) a.textContent=APP_VERSION;
   const b=document.getElementById('appVerSettings'); if(b) b.textContent=APP_VERSION;
