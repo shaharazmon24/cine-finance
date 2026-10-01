@@ -260,13 +260,23 @@ label.fld input:focus,label.fld select:focus,label.fld textarea:focus{
 .finnote{color:var(--muted);font-size:12px;line-height:1.6;margin:10px 0}
 .fin-sub-h{margin:16px 0 2px;font-size:12px;font-weight:600;color:var(--muted)}
 /* expenses list */
-.actfill-head,.actfill-row{display:grid;grid-template-columns:1fr 110px 110px 60px;gap:10px;align-items:center}
+/* quarter-hour time field: two compact selects reading HH : MM left-to-right */
+div.fld{display:flex; flex-direction:column; gap:6px; font-size:12.5px; color:var(--muted)}
+.qtime{display:flex; align-items:center; gap:6px; width:100%}
+.qtime select{flex:1; min-width:0; background:var(--bg); border:1px solid var(--line2); border-radius:9px; padding:11px 8px;
+  color:var(--text); font:inherit; font-size:15px; text-align:center; text-align-last:center; cursor:pointer}
+.qtime select:focus{outline:none; border-color:var(--accent-dim); box-shadow:0 0 0 3px rgba(226,181,95,.1)}
+.qtime .qt-sep{color:var(--muted); font-weight:600}
+.actfill-row .qtime select{padding:6px 2px; font-size:13px; border-radius:8px}
+.wd-terms{flex-basis:100%; font-size:12.5px; line-height:1.7; color:var(--text)}
+.wd-warn{flex-basis:100%; font-size:12.5px; line-height:1.6; color:var(--warn)}
+.actfill-head,.actfill-row{display:grid;grid-template-columns:1fr 128px 128px 52px;gap:10px;align-items:center}
 .actfill-head{font-size:11.5px;opacity:.55;padding:0 0 6px}
 .actfill-row{padding:7px 0;border-top:1px solid var(--line)}
 .actfill-row input{font:inherit;font-size:13px;padding:5px 8px;border-radius:8px;border:1px solid var(--line);background:transparent;color:inherit}
 .af-d{font-size:13px}
 .af-h{font-size:12px;text-align:start}
-@media(max-width:760px){.actfill-head{display:none}.actfill-row{grid-template-columns:1fr 1fr 1fr 44px;gap:6px}}
+@media(max-width:760px){.actfill-head{display:none}.actfill-row{grid-template-columns:64px 1fr 1fr 40px;gap:6px}}
 /* ---------- Mail docs (receipts scanned out of Gmail) ---------- */
 .md-strip{display:grid;grid-template-columns:repeat(auto-fill,minmax(124px,1fr));gap:10px}
 /* base `button{}` sets no color, so a <button> falls back to the UA's black buttontext —
@@ -2793,22 +2803,8 @@ function openWorkday(id, presetDate, presetProjectId){
   const cOpts = `<option value="">${inheritLbl}</option>`+
     contracts.map(c=>`<option value="${c.id}" ${w.contractId===c.id?'selected':''}>${esc(c.name||'חוזה')}${c.project?' · '+esc(c.project):''}</option>`).join('');
   const stOpts = WD_STATUS.map(([k,l])=>`<option value="${k}" ${ (w.status||'unissued')===k?'selected':''}>${l}</option>`).join('');
-  const inheritBanner = (_proj||_inhC)?
-    `<div class="notice" style="margin-bottom:14px;display:flex;align-items:center;gap:8px;flex-wrap:wrap">
-      ${_proj?`<span class="cdot" style="background:${projColor(w.projectId)}"></span><b>${esc(_proj.name)}</b>`:'<b>יום עצמאי</b>'}
-      <span class="faint">יורש אוטומטית:</span>
-      ${_inhC?`<span>חוזה <b>${esc(_inhC.name||'')}</b></span>`:''}
-      ${_effClient?`<span>· לקוח <b>${esc(_effClient)}</b></span>`:''}
-      ${_effRate!==''?`<span>· תעריף <b>${fmtMoney(_effRate)}</b></span>`:''}
-      ${_effRole?`<span>· תפקיד <b>${esc(_effRole)}</b></span>`:''}
-      <span class="faint" style="flex-basis:100%;font-size:11.5px">ערוך שדה רק כדי לעקוף ערך ליום הזה. השאר ריק = יורש מהפרויקט.</span>
-    </div>` :
-    `<div class="notice" style="margin-bottom:14px;display:flex;align-items:center;gap:8px;flex-wrap:wrap">
-      <b>יום עצמאי</b>
-      <span class="faint">— לא משויך לפרויקט. הזן תעריף ידנית, או שייך לפרויקט / חוזה בשדות למטה.</span>
-    </div>`;
   document.getElementById('wdBody').innerHTML=`
-    ${inheritBanner}
+    <div id="wd_inheritBanner"></div>
     <div class="grid" style="grid-template-columns:1fr 1fr">
       <label class="fld">תאריך<input type="date" id="wd_date" value="${esc(w.date||'')}"></label>
       <label class="fld">פרויקט
@@ -2829,8 +2825,8 @@ function openWorkday(id, presetDate, presetProjectId){
       <label class="fld">תפקיד<input type="text" id="wd_role" value="${esc(w.role||'')}" placeholder="${_effRole?esc(_effRole)+' (מהחוזה)':'צלם / מפעיל...'}"></label>
       <label class="fld">לקוח / הפקה (אם שונה)<input type="text" id="wd_client" value="${esc(w.client||'')}" placeholder="${_effClient?esc(_effClient)+' (מהפרויקט)':'ברירת מחדל מהפרויקט'}"></label>
       <label class="fld">תעריף יומי ₪<input type="number" id="wd_rate" value="${w.dayRate!=null?esc(w.dayRate):''}" oninput="renderWdPreview()" placeholder="${_effRate!==''?_effRate+' (מהחוזה)':'מהחוזה אם ריק'}"></label>
-      <label class="fld">שעת התחלה<input type="time" id="wd_start" step="900" value="${esc(w.startTime||'')}" oninput="onWdTimeChange()"></label>
-      <label class="fld">שעת סיום<input type="time" id="wd_end" step="900" value="${esc(w.endTime||'')}" oninput="onWdTimeChange()"></label>
+      <div class="fld">שעת התחלה${qTimeHtml({id:'wd_start', value:w.startTime, onchange:'onWdTimeChange()'})}</div>
+      <div class="fld">שעת סיום${qTimeHtml({id:'wd_end', value:w.endTime, onchange:'onWdTimeChange()'})}</div>
       <label class="fld">סה"כ שעות<input type="number" id="wd_hours" step="0.25" value="${w.hoursWorked!=null?esc(w.hoursWorked):''}" oninput="renderWdPreview()" placeholder="אוטומטי מהשעות"></label>
       <label class="fld">השכרת ציוד ₪<input type="number" id="wd_gear" value="${w.gearRental!=null?esc(w.gearRental):''}" oninput="renderWdPreview()"></label>
       <label class="fld">טבעת נסיעה (אקט)<select id="wd_ring" onchange="onWdRingChange()">${ACT_TRAVEL_RINGS.map(([k,l,amt])=>`<option value="${k}" ${ (w.ring||'')===k?'selected':''}>${l}${amt!=null&&amt>0?' · '+amt+' ₪':''}</option>`).join('')}</select></label>
@@ -2865,9 +2861,107 @@ function openWorkday(id, presetDate, presetProjectId){
     <label class="fld" style="margin-top:10px">הערות<textarea id="wd_notes" rows="2">${esc(w.notes||'')}</textarea></label>
     <div id="wdPreview"></div>`;
   _prevProjSel = w.projectId||'';
+  refreshWdInherit();
   renderWdPreview();
   openModal('wdModal');
 }
+/* ---- quarter-hour time field --------------------------------------------------------------
+   ACT's calculator takes a time from a dropdown list in quarter hours, so this does too: an hour
+   list and a minutes list (00/15/30/45). It replaced <input type="time" step="900">, whose native
+   picker simply did not open on the owner's phone — a stepped time input is the one variant mobile
+   browsers handle through a separate, less reliable dialog. Two plain <select>s open everywhere.
+   A hidden input keeps the "HH:MM" value under the same id/class, so every reader of
+   document.getElementById('wd_start').value is untouched. */
+const Q_MINUTES=['00','15','30','45'];
+function qTimeHtml(o){
+  const m=/^(\d{1,2}):(\d{2})$/.exec(String(o.value||'').trim());
+  const hh=m?String(+m[1]).padStart(2,'0'):'', mm=m?m[2]:'';
+  let hOpts='<option value="">--</option>';
+  for(let h=0;h<24;h++){ const v=String(h).padStart(2,'0'); hOpts+='<option value="'+v+'"'+(v===hh?' selected':'')+'>'+v+'</option>'; }
+  const mins=Q_MINUTES.slice(); if(mm && mins.indexOf(mm)<0) mins.push(mm);   // a legacy off-grid time stays visible so it can be corrected
+  let mOpts='<option value="">--</option>';
+  mins.forEach(function(v){ mOpts+='<option value="'+v+'"'+(v===mm?' selected':'')+'>'+v+'</option>'; });
+  return '<span class="qtime" dir="ltr">'+
+    '<input type="hidden"'+(o.id?' id="'+o.id+'"':'')+(o.cls?' class="'+o.cls+'"':'')+' value="'+(m?hh+':'+mm:'')+'" data-onchange="'+esc(o.onchange||'')+'">'+
+    '<select class="qt-h" aria-label="שעה" onchange="qTimeChanged(this)">'+hOpts+'</select><span class="qt-sep">:</span>'+
+    '<select class="qt-m" aria-label="דקות" onchange="qTimeChanged(this)">'+mOpts+'</select></span>';
+}
+function qTimeChanged(sel){
+  const box=sel.closest('.qtime'), hid=box.querySelector('input[type=hidden]');
+  const h=box.querySelector('.qt-h'), m=box.querySelector('.qt-m');
+  if(sel===h && h.value && !m.value) m.value='00';      // picking an hour is a complete time
+  if(sel===h && !h.value) m.value='';                    // clearing the hour clears the field
+  hid.value=(h.value && m.value) ? (h.value+':'+m.value) : '';
+  const fn=hid.dataset.onchange;
+  if(fn){ try{ (new Function('el',fn))(hid); }catch(e){ console.error(e); } }
+}
+function qTimeSet(hid, value){
+  const box=hid.closest('.qtime'); if(!box) { hid.value=value||''; return; }
+  const m=/^(\d{1,2}):(\d{2})$/.exec(String(value||'').trim());
+  const h=box.querySelector('.qt-h'), mi=box.querySelector('.qt-m');
+  if(!m){ h.value=''; mi.value=''; hid.value=''; return; }
+  const hh=String(+m[1]).padStart(2,'0'), mm=m[2];
+  if(![...mi.options].some(function(o){ return o.value===mm; })){ const o=document.createElement('option'); o.value=mm; o.textContent=mm; mi.appendChild(o); }
+  h.value=hh; mi.value=mm; hid.value=hh+':'+mm;
+}
+
+/* ---- what a day inherits, shown live ---------------------------------------------------------
+   A day with no contract of its own inherits the project's. That was only worked out once, when
+   the form opened: choosing a project from the dropdown afterwards left the banner saying
+   "יום עצמאי", the contract list on its generic label and the rate hint empty, and choosing a
+   contract by hand filled in nothing visible — so the link looked broken and the terms looked
+   missing although the pay below was already computed from them. Everything the form shows about
+   inheritance is now derived from the two selects every time either changes, and the contract's
+   terms are spelled out. */
+function wdTermsLine(c){
+  if(!c) return '';
+  const s=settings(), bits=[];
+  if(c.dayRate!=null && c.dayRate!=='') bits.push('תעריף <b>'+fmtMoney(+c.dayRate)+'</b>');
+  const base=(c.baseDayHours)?+c.baseDayHours:(+s.baseHours||10);
+  const fri=(c.baseDayHoursFriEve!=null && c.baseDayHoursFriEve!=='')?+c.baseDayHoursFriEve:Math.max(1,base-1.5);
+  bits.push('יום בסיס <b>'+base+' ש\'</b> · שישי '+fri);
+  const model=otModelOf(c);
+  let ot;
+  if(model==='bands'){ const b=otBandsOf(null,c); ot=b.length?b.map(function(x){ return Math.round(x.mult*100)+'%'; }).join(' / '):'מדרגות החוזה (לא הוגדרו)'; }
+  else if(model==='act') ot='מחשבון אקט 125 / 150 / 200 / 250 / 300 / 350%';
+  else if(model==='act2023') ot='נוסח הסכם 2023';
+  else if(model==='flat') ot='×'+otMultOf(c)+' לשעה';
+  else ot='ללא תוספת';
+  bits.push('ש"נ <b>'+esc(ot)+'</b>');
+  bits.push('מע"מ <b>'+esc(vatModeLabel(vatModeOf(null,c)))+'</b>');
+  if(c.paymentTerms) bits.push('תשלום '+esc(String(c.paymentTerms).slice(0,40)));
+  return bits.join(' · ');
+}
+function refreshWdInherit(){
+  const pSel=document.getElementById('wd_project'), cSel=document.getElementById('wd_contract');
+  if(!pSel || !cSel) return;
+  const proj=(pSel.value && pSel.value!=='__new') ? projectById(pSel.value) : null;
+  const own=cSel.value ? contractById(cSel.value) : null;
+  const inherited=(!own && proj && proj.contractId) ? contractById(proj.contractId) : null;
+  const c=own||inherited;
+  // the contract list says what "inherit" resolves to right now
+  if(cSel.options.length) cSel.options[0].textContent = inherited ? ('— יורש מהפרויקט: '+(inherited.name||'חוזה')+' —')
+    : (proj ? '— לפרויקט הזה אין חוזה · בחר חוזה או הזן תעריף —' : '— ללא חוזה / ידני —');
+  // hints inside the empty fields
+  const rate=document.getElementById('wd_rate'), role=document.getElementById('wd_role'), client=document.getElementById('wd_client');
+  if(rate) rate.placeholder = (c && c.dayRate!=null && c.dayRate!=='') ? (c.dayRate+' (מהחוזה)') : 'הזן תעריף';
+  if(role) role.placeholder = (c && c.role) ? (c.role+' (מהחוזה)') : 'צלם / מפעיל...';
+  if(client) client.placeholder = (proj && proj.client) ? (proj.client+' (מהפרויקט)') : 'ברירת מחדל מהפרויקט';
+  const el=document.getElementById('wd_inheritBanner'); if(!el) return;
+  const head = proj ? '<span class="cdot" style="background:'+projColor(proj.id)+'"></span><b>'+esc(proj.name||'פרויקט')+'</b>' : '<b>יום עצמאי</b>';
+  let body;
+  if(c){
+    body='<span>'+(own?'חוזה שנבחר ליום הזה':'חוזה מהפרויקט')+': <b>'+esc(c.name||'חוזה')+'</b></span>'+
+         '<div class="wd-terms">'+wdTermsLine(c)+'</div>'+
+         '<span class="faint" style="flex-basis:100%;font-size:11.5px">התנאים האלה כבר מחושבים למטה. שדה ריק = לפי החוזה; מלא שדה רק כדי לעקוף ליום הזה.</span>';
+  } else if(proj){
+    body='<span class="wd-warn">לפרויקט הזה אין חוזה מקושר — היום יחושב בלי תנאים. בחר חוזה למטה, או קשר חוזה לפרויקט (✎ ליד שם הפרויקט) כדי שכל הימים שלו יירשו אותו.</span>';
+  } else {
+    body='<span class="faint">— לא משויך לפרויקט. בחר פרויקט או חוזה, או הזן תעריף ידנית.</span>';
+  }
+  el.innerHTML='<div class="notice" style="margin-bottom:14px;display:flex;align-items:center;gap:8px;flex-wrap:wrap">'+head+body+'</div>';
+}
+
 let _prevProjSel='';
 function onWdProjectChange(){
   const sel=document.getElementById('wd_project');
@@ -2886,18 +2980,16 @@ function onWdProjectChange(){
     if(c){
       // leave the select on "inherit" so a later contract correction still reaches this day
       document.getElementById('wd_vatmode').value='';
-      const roleEl=document.getElementById('wd_role'); if(c.role && !roleEl.value) roleEl.value=c.role;
     }
   }
+  refreshWdInherit();
   renderWdPreview();
 }
 function onWdContractChange(){
   const cid=document.getElementById('wd_contract').value;
   const c=cid?contractById(cid):null;
-  if(c){
-    document.getElementById('wd_vatmode').value='';
-    const roleEl=document.getElementById('wd_role'); if(c.role && !roleEl.value) roleEl.value=c.role;
-  }
+  if(c) document.getElementById('wd_vatmode').value='';
+  refreshWdInherit();
   renderWdPreview();
 }
 /* total hours from start/end times (handles a shift that crosses midnight) */
@@ -5531,8 +5623,8 @@ function actOpenHoursFill(projId, ym, onlyMissing){
       const dow=['א','ב','ג','ד','ה','ו','ש'][dt.getDay()];
       return '<div class="actfill-row" data-id="'+w.id+'">'+
         '<span class="af-d">'+d.slice(8)+'/'+d.slice(5,7)+' <span class="faint">'+dow+'</span></span>'+
-        '<input type="time" step="900" class="af-s" value="'+esc(w.startTime||'')+'" oninput="actFillRecalc(this)">'+
-        '<input type="time" step="900" class="af-e" value="'+esc(w.endTime||'')+'" oninput="actFillRecalc(this)">'+
+        qTimeHtml({cls:'af-s', value:w.startTime, onchange:'actFillRecalc(el)'})+
+        qTimeHtml({cls:'af-e', value:w.endTime, onchange:'actFillRecalc(el)'})+
         '<span class="af-h faint">'+((w.startTime&&w.endTime)?hoursBetween(w.startTime,w.endTime).toFixed(2):'—')+'</span>'+
       '</div>';
     }).join('')+
@@ -5552,7 +5644,7 @@ function actFillApplyAll(){
   let n=0;
   rows.forEach(function(r){
     const si=r.querySelector('.af-s'), ei=r.querySelector('.af-e');
-    if(!si.value && !ei.value){ si.value=s; ei.value=e; actFillRecalc(si); n++; }
+    if(!si.value && !ei.value){ qTimeSet(si,s); qTimeSet(ei,e); actFillRecalc(si); n++; }
   });
   if(!n) alert('אין שורות ריקות להחיל עליהן.');
 }
@@ -5683,7 +5775,7 @@ async function exportActCalc(projId, ym){
 }
 
 /* ---------- version + auto-update (keeps the installed PWA in sync with the site) ---------- */
-const APP_VERSION='2026.09.15.2';
+const APP_VERSION='2026.10.01.1';
 function setVersionLabels(){
   const a=document.getElementById('appVer'); if(a) a.textContent=APP_VERSION;
   const b=document.getElementById('appVerSettings'); if(b) b.textContent=APP_VERSION;
